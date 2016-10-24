@@ -28,14 +28,42 @@ function escapeHtml(unsafe) {
     .replace(/'/g, "&#039;");
 }
 
-function renderScreen(pre, data) {
-  pre.innerHTML += emojione.unicodeToImage(escapeHtml(data));
-  pre.scrollTop = pre.scrollHeight;
+function colorName(index) {
+  return ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'][index];
+}
+
+function renderScreen() {
+  var html = '';
+  for (var y = 0; y < screenBuffer.rows; y++) {
+    for (var x = 0; x < screenBuffer.columns; x++) {
+      if (y === screenBuffer.cursor_y && x === screenBuffer.cursor_x) {
+        html += '<span style="color: magenta; font-style: bold">■</span>';
+      }
+      var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
+      console.log( cell.character );
+      var buf = emojione.unicodeToImage(escapeHtml(cell.character));
+      if (cell.attrs.bold) {
+        buf = `<b>${buf}</b>`;
+      }
+      buf = `<span style="color: ${colorName(cell.attrs.textColor)}; background-color: ${colorName(cell.attrs.backgroundColor)}">${buf}</span>`;
+      html += buf;
+    }
+    html += '<br>';
+  }
+
+  // console.log(['html', html]);
+  var pre = document.getElementById('screen');
+  pre.innerHTML = html; 
+  //  pre.scrollTop = pre.scrollHeight;
 }
 
 function addData(data) {
-  var pre = document.querySelector('pre');
-  renderScreen(pre, data);
+  screenBuffer.feed(data);
+  renderScreen();
+
+  var title = document.querySelector('title');
+  title.text = screenBuffer.title;
+  // console.log('rendered');
 }
 
 // Dec Hex    Dec Hex    Dec Hex  Dec Hex  Dec Hex  Dec Hex   Dec Hex   Dec Hex  
@@ -85,13 +113,13 @@ function toCharacter(key, ctrlKey, altKey) {
 
 function typeIn(ev) {
   var str = toCharacter(ev.key, ev.ctrlKey, ev.altKey);
-  console.log(inspect(str));
+  // console.log(inspect(str));
   if (str.length !== 0)
     term.write(str);
 }
 
 function inspect(str) {
-  var out = '"';
+  var out = '';
 
   for (var c of str) {
     var num = ord(c);
@@ -108,12 +136,11 @@ function inspect(str) {
     }
   }
 
-  out += '"';
   return out;
 }
 
 var term = pty.spawn('bash', [], {
-  name: 'dumb',
+  name: 'xterm-color',
   cols: 80,
   rows: 30,
   cwd: process.cwd(),
@@ -121,6 +148,7 @@ var term = pty.spawn('bash', [], {
 });
 
 term.on('data', function(data) {
+  // console.log(['output', inspect(data)]);
   addData(data);
 });
 
