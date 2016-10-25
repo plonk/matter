@@ -4,8 +4,6 @@ var pty = require('pty');
 var {ipcRenderer} = require('electron')
 var {ScreenBuffer} = require('./screenBuffer')
 
-var screenBuffer = new ScreenBuffer(80, 30);
-
 // -----------
 
 function ord(str) {
@@ -18,7 +16,6 @@ function chr(codePoint) {
 
 // -----------
 
-
 function escapeHtml(unsafe) {
   return unsafe
     .replace(/&/g, "&amp;")
@@ -29,23 +26,28 @@ function escapeHtml(unsafe) {
 }
 
 function colorName(index) {
-  return ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'][index];
+  return ['#303030', '#be1137', '#29732c', '#c95c26', '#2a5aa2', '#cd3a93', '#078692', '#d0d0d0'][index];
+  // return ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'][index];
 }
 
 function renderScreen() {
   var html = '';
   for (var y = 0; y < screenBuffer.rows; y++) {
     for (var x = 0; x < screenBuffer.columns; x++) {
-      if (y === screenBuffer.cursor_y && x === screenBuffer.cursor_x) {
-        html += '<span style="color: magenta; font-style: bold">■</span>';
-      }
       var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
-      console.log( cell.character );
-      var buf = emojione.unicodeToImage(escapeHtml(cell.character));
+      // console.log( cell.character );
+      var char = (cell.character === ' ') ? '\xa0' : cell.character;
+      var buf = emojione.unicodeToImage(escapeHtml(char));
       if (cell.attrs.bold) {
         buf = `<b>${buf}</b>`;
       }
-      buf = `<span style="color: ${colorName(cell.attrs.textColor)}; background-color: ${colorName(cell.attrs.backgroundColor)}">${buf}</span>`;
+
+      if (y === screenBuffer.cursor_y && x === screenBuffer.cursor_x &&
+          screenBuffer.isCursorVisible) {
+        buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; background-color: magenta; color: white">${buf}</div>`;
+      } else {
+        buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; color: ${colorName(cell.attrs.textColor)}; background-color: ${colorName(cell.attrs.backgroundColor)}">${buf}</div>`;
+      }
       html += buf;
     }
     html += '<br>';
@@ -85,10 +87,17 @@ function addData(data) {
 //  15 0F SI   31 1F US   47 2F /  63 3F ?  79 4F O  95 5F _  111 6F o  127 7F DEL
 
 var CHARACTER_TABLE = {
-  'Enter'    : '\x0d',
-  'Delete'   : '\x1b[3~',
-  'Backspace': '\x7f',
+  'Enter'      : '\x0d',
+  'Delete'     : '\x1b[3~',
+  'Backspace'  : '\x7f',
+  'Tab'        : '\x09',
+  'ArrowUp'    : '\x1b[A',
+  'ArrowDown'  : '\x1b[B',
+  'ArrowRight' : '\x1b[C',
+  'ArrowLeft'  : '\x1b[D',
+  'Escape'     : '\x1b',
 };
+
 function toCharacter(key, ctrlKey, altKey) {
   if (altKey) {
     return "\x1b" + toCharacter(key, ctrlKey, false);
@@ -140,7 +149,7 @@ function inspect(str) {
 }
 
 var term = pty.spawn('bash', [], {
-  name: 'xterm-color',
+  name: 'ansi',
   cols: 80,
   rows: 30,
   cwd: process.cwd(),
@@ -148,9 +157,15 @@ var term = pty.spawn('bash', [], {
 });
 
 term.on('data', function(data) {
-  // console.log(['output', inspect(data)]);
+  console.log(['output', inspect(data)]);
   addData(data);
 });
+
+term.on('close', function () {
+  window.close();
+});
+
+var screenBuffer = new ScreenBuffer(term, 80, 30);
 
 window.onload = () => {
   var body = document.querySelector('body');
