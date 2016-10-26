@@ -30,34 +30,89 @@ function colorName(index) {
   // return ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'][index];
 }
 
+function toFraktur (char) {
+  if (char.length !== 1)
+    return char;
+
+  var fraktur = ['𝔄', '𝔅', 'ℭ', '𝔇', '𝔈', '𝔉', '𝔊', 'ℌ', 'ℑ', '𝔍', '𝔎', '𝔏', '𝔐', '𝔑', '𝔒', '𝔓', '𝔔', 'ℜ', '𝔖', '𝔗', '𝔘', '𝔙', '𝔚', '𝔛', '𝔜', 'ℨ',
+                 '𝔞', '𝔟', '𝔠', '𝔡', '𝔢', '𝔣', '𝔤', '𝔥', '𝔦', '𝔧', '𝔨', '𝔩', '𝔪', '𝔫', '𝔬', '𝔭', '𝔮', '𝔯', '𝔰', '𝔱', '𝔲', '𝔳', '𝔴', '𝔵', '𝔶', '𝔷'];
+  var normal = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "abcdefghijklmnopqrstuvwxyz";
+  var index = normal.indexOf(char);
+
+  if (index === -1) {
+    return char;
+  } else {
+    return fraktur[index];
+  }
+}
+
 function renderScreen() {
-  var html = '';
+  var screen = document.getElementById('screen');
+
   for (var y = 0; y < screenBuffer.rows; y++) {
     for (var x = 0; x < screenBuffer.columns; x++) {
       var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
-      // console.log( cell.character );
       var char = (cell.character === ' ') ? '\xa0' : cell.character;
-      var buf = emojione.unicodeToImage(escapeHtml(char));
-      if (cell.attrs.bold) {
-        buf = `<b>${buf}</b>`;
-      }
+      char = emojione.unicodeToImage(escapeHtml(char));
 
+      var view = $(`#${y}-${x}`);
+      var classes = [];
+
+      view.removeClass();
+      if (cell.attrs.bold) classes.push('bold');
+      if (cell.attrs.italic) classes.push('italic');
+      if (cell.attrs.blink) classes.push('blink');
+      if (cell.attrs.fastBlink) classes.push('fast-blink');
+      if (cell.attrs.fraktur) {
+        char = toFraktur(char);
+      }
+      if (cell.attrs.crossedOut) classes.push('crossed-out');
+      if (cell.attrs.underline) classes.push('underline');
+      if (cell.attrs.faint) classes.push('faint');
+      if (cell.attrs.conceal) classes.push('conceal');
+      
       if (y === screenBuffer.cursor_y && x === screenBuffer.cursor_x &&
           screenBuffer.isCursorVisible) {
-        buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; background-color: magenta; color: white">${buf}</div>`;
-      } else {
-        buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; color: ${colorName(cell.attrs.textColor)}; background-color: ${colorName(cell.attrs.backgroundColor)}">${buf}</div>`;
+        classes.push('cursor');
       }
-      html += buf;
-    }
-    html += '<br>';
-  }
+      classes.push(`text-color-${cell.attrs.textColor}`);
+      classes.push(`background-color-${cell.attrs.backgroundColor}`);
 
-  // console.log(['html', html]);
-  var pre = document.getElementById('screen');
-  pre.innerHTML = html; 
-  //  pre.scrollTop = pre.scrollHeight;
+      view.addClass(classes.join(' '));
+
+      view.html(char);
+    }
+  }
 }
+
+// function renderScreen() {
+//   var html = '';
+//   for (var y = 0; y < screenBuffer.rows; y++) {
+//     for (var x = 0; x < screenBuffer.columns; x++) {
+//       var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
+//       // console.log( cell.character );
+//       var char = (cell.character === ' ') ? '\xa0' : cell.character;
+//       var buf = emojione.unicodeToImage(escapeHtml(char));
+//       if (cell.attrs.bold) {
+//         buf = `<b>${buf}</b>`;
+//       }
+
+//       if (y === screenBuffer.cursor_y && x === screenBuffer.cursor_x &&
+//           screenBuffer.isCursorVisible) {
+//         buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; background-color: magenta; color: white">${buf}</div>`;
+//       } else {
+//         buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; color: ${colorName(cell.attrs.textColor)}; background-color: ${colorName(cell.attrs.backgroundColor)}">${buf}</div>`;
+//       }
+//       html += buf;
+//     }
+//     html += '<br>';
+//   }
+
+//   // console.log(['html', html]);
+//   var pre = document.getElementById('screen');
+//   pre.innerHTML = html;
+//   //  pre.scrollTop = pre.scrollHeight;
+// }
 
 function addData(data) {
   screenBuffer.feed(data);
@@ -68,7 +123,7 @@ function addData(data) {
   // console.log('rendered');
 }
 
-// Dec Hex    Dec Hex    Dec Hex  Dec Hex  Dec Hex  Dec Hex   Dec Hex   Dec Hex  
+// Dec Hex    Dec Hex    Dec Hex  Dec Hex  Dec Hex  Dec Hex   Dec Hex   Dec Hex
 //   0 00 NUL  16 10 DLE  32 20    48 30 0  64 40 @  80 50 P   96 60 `  112 70 p
 //   1 01 SOH  17 11 DC1  33 21 !  49 31 1  65 41 A  81 51 Q   97 61 a  113 71 q
 //   2 02 STX  18 12 DC2  34 22 "  50 32 2  66 42 B  82 52 R   98 62 b  114 72 r
@@ -121,6 +176,9 @@ function toCharacter(key, ctrlKey, altKey) {
 }
 
 function typeIn(ev) {
+  if (ev.key === 'Control' || ev.key === 'Shift' || ev.key === 'Alt')
+    return;
+
   var str = toCharacter(ev.key, ev.ctrlKey, ev.altKey);
   // console.log(inspect(str));
   if (str.length !== 0)
@@ -148,6 +206,18 @@ function inspect(str) {
   return out;
 }
 
+function populate(screen) {
+  var str = '';
+
+  for (var y = 0; y < 30; y++) {
+    for (var x = 0; x < 80; x++) {
+      str += `<div id="${y}-${x}" style="overflow: visible; line-height: 20px; height: 20px; vertical-align: middle; display: inline-block"></div>`;
+    }
+    str += '<br>';
+  }
+  screen.innerHTML = str;
+}
+
 var term = pty.spawn('bash', [], {
   name: 'ansi',
   cols: 80,
@@ -173,4 +243,7 @@ window.onload = () => {
     e.preventDefault();
     typeIn(e);
   });
+
+  var screen = document.getElementById('screen');
+  populate(screen);
 };

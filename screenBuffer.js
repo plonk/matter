@@ -1,8 +1,5 @@
 var eastasianwidth = require('eastasianwidth');
 
-function ColorInterpreter() {
-}
-
 function GraphicAttrs() {
   // 色インデックスで指定するのはよくないな。
   this.reset();
@@ -12,11 +9,19 @@ GraphicAttrs.prototype.reset = function () {
   this.textColor = 0;
   this.backgroundColor = 7;
   this.bold = false;
+  this.italic = false;
+  this.blink = false;
+  this.fastBlink = false;
+  this.fraktur = false;
+  this.crossedOut = false;
+  this.underline = false;
+  this.faint = false;
+  this.conceal = false;
 };
 
 GraphicAttrs.prototype.clone = function () {
   var res = new GraphicAttrs();
-  for (var attr of ['textColor', 'backgroundColor', 'bold']) {
+  for (var attr of ['textColor', 'backgroundColor', 'bold', 'italic', 'blink', 'fastBlink', 'fraktur', 'crossedOut', 'underline', 'faint', 'conceal']) {
     res[attr] = this[attr];
   }
   return res;
@@ -42,6 +47,7 @@ function ScreenBuffer(term, columns, rows) {
   this.title = '';
   this.isCursorVisible = true;
   this.term = term;
+  this.lastGraphicCharacter = ' ';
 }
 
 ScreenBuffer.prototype.resize = function (columns, rows) {
@@ -90,13 +96,9 @@ ScreenBuffer.prototype.lineFeed = function () {
   }
 };
 
-// カーソル位置はオフセットで保待したほうが簡単な気がしてきた。
-
 // 行末に文字を追加しても、次の行にいっちゃいけないんだよなぁ。むずかしい。
 // 画面の右下のセルに文字を表示しても、画面がスクロールしてはいけない。
 // どうやって実装するんだろう。
-
-// ^[ [ H がカーソル (0,0) で、^[ [ 2 J が画面クリアらしい。
 
 ScreenBuffer.prototype.fc_normal = function (c) {
   if (c === '\x08') { // ^H
@@ -140,25 +142,33 @@ function wcwidth(c) {
 }
 
 ScreenBuffer.prototype.addCharacter = function (c) {
-    switch (wcwidth(c)) {
-    case 1:
-      var cell = this.buffer[this.cursorOffset()];
-      cell.attrs = this.graphicAttrs.clone();
-      cell.character = c;
-      this.advanceCursor();
-      break;
-    case 2:
-      this.buffer[this.cursorOffset()].attrs = this.graphicAttrs.clone();
-      this.buffer[this.cursorOffset()].character = c;
-      this.buffer[this.cursorOffset() + 1].attrs = this.graphicAttrs.clone();
-      this.buffer[this.cursorOffset() + 1].character = '';
-      this.advanceCursor();
-      this.advanceCursor();
-      break;
-    default:
-      console.log(`length ${c}`)
-      break;
-    }
+  this.lastGraphicCharacter = c;
+  switch (wcwidth(c)) {
+  case 1:
+    var cell = this.buffer[this.cursorOffset()];
+    cell.attrs = this.graphicAttrs.clone();
+    cell.character = c;
+    this.advanceCursor();
+    break;
+  case 2:
+    this.buffer[this.cursorOffset()].attrs = this.graphicAttrs.clone();
+    this.buffer[this.cursorOffset()].character = c;
+    this.buffer[this.cursorOffset() + 1].attrs = this.graphicAttrs.clone();
+    this.buffer[this.cursorOffset() + 1].character = '';
+    this.advanceCursor();
+    this.advanceCursor();
+    break;
+  default:
+    console.log(`length ${c}`)
+    break;
+  }
+};
+
+ScreenBuffer.prototype.repeatLastCharacter = function (args_str) {
+  var num = +(args_str || '1'); // デフォルト値不明
+
+  for (var i = 0; i < num ; i++)
+    this.addCharacter(this.lastGraphicCharacter);
 };
 
 // 画面のクリア。カーソル位置はそのまま。
@@ -265,11 +275,67 @@ ScreenBuffer.prototype.selectGraphicRendition = function (args_str) {
     } else if (arg === 1) {
       this.graphicAttrs.bold = true;
       i++;
+    } else if (arg === 2) { // faint
+      this.graphicAttrs.faint = true;
+      i++;
+    } else if (arg === 3) { // italic
+      this.graphicAttrs.italic = true;
+      i++;
+    } else if (arg === 4) { // underline
+      this.graphicAttrs.underline = true;
+      i++;
+    } else if (arg === 5) { // blink slow
+      this.graphicAttrs.blink = true;
+      i++;
+    } else if (arg === 6) { // blink rapid
+      this.graphicAttrs.fastBlink = true;
+      i++;
     } else if (arg === 7) {
       this.reverseVideo();
       i++;
+    } else if (arg === 8) { // conceal
+      this.graphicAttrs.conceal = true;
+      i++;
+    } else if (arg === 9) { // crossed out
+      this.graphicAttrs.crossedOut = true;
+      i++;
+    } else if (arg >= 10 && arg <= 19) {
+      // Unimplemented
+      // this.setFont(arg - 10);
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
+    } else if (arg === 20) { // fraktur
+      this.graphicAttrs.fraktur = true;
+      i++;
+    } else if (arg === 21) { // bold off (or underline double)
+      this.graphicAttrs.bold = false;
+      i++;
+    } else if (arg === 22) { // normal color/intensity
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
+    } else if (arg === 23) { // neither italic nor fraktur
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
+    } else if (arg === 24) { // underline: none
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
+    } else if (arg === 25) { // blink: off
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
+    } else if (arg === 27) { // image: positive
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
+    } else if (arg === 28) { // reveal
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
+    } else if (arg === 29) { // not crossed out
+      console.log(`unsupported SGR arg ${args[i]}`);
+      i++;
     } else if (arg >= 30 && arg <= 37) {
       this.graphicAttrs.textColor = arg - 30;
+      i++;
+    } else if (arg === 38) { // extended set foreground
+      console.log(`unsupported SGR arg ${args[i]}`);
       i++;
     } else if (arg === 39) {
       this.defaultTextColor();
@@ -279,10 +345,6 @@ ScreenBuffer.prototype.selectGraphicRendition = function (args_str) {
       i++;
     } else if (arg === 49) {
       this.defaultBackgroundColor();
-      i++;
-    } else if (arg >= 10 && arg <= 19) {
-      // Unimplemented
-      // this.setFont(arg - 10);
       i++;
     } else {
       console.log(`unknown SGR arg ${args[i]}`);
@@ -366,6 +428,16 @@ ScreenBuffer.prototype.deleteCharacters = function (args_str) {
   }
 };
 
+ScreenBuffer.prototype.eraseCharacters = function (args_str) {
+  var num = +(args_str || '1');
+
+  num = Math.min(num, this.columns - this.cursor_x);
+
+  for (var i = 0; i < num; i++) {
+    this.buffer[this.cursor_y * this.columns + this.cursor_x + i] = new Cell();
+  }
+};
+
 ScreenBuffer.prototype.cursorHorizontalAbsolute = function (args_str) {
   var num = +(args_str || '1');
 
@@ -402,11 +474,26 @@ ScreenBuffer.prototype.insertBlankCharacters = function (args_str) {
 };
 
 ScreenBuffer.prototype.insertLines = function (args_str) {
-  console.log('unimplemented');
+  var num = +(args_str || '1');
+  var newLines = Array.from(Array(num * this.columns), () => new Cell());
+
+  var args = [this.cursor_y * this.columns, 0].concat(newLines);
+  Array.prototype.splice.apply(this.buffer, args);
+
+  this.buffer = this.buffer.slice(0, this.columns * this.rows);
+
+  if (this.buffer.length !== this.columns * this.rows)
+    console.log('bug');
 };
 
 ScreenBuffer.prototype.deleteLines = function (args_str) {
-  console.log('unimplemented');
+  var num = +(args_str || '1');
+
+  this.buffer.splice(this.cursor_y * this.columns, num * this.columns);
+  this.buffer = this.buffer.concat(Array.from(Array(num * this.columns), () => new Cell()));
+
+  if (this.buffer.length !== this.columns * this.rows)
+    console.log('bug');
 };
 
 ScreenBuffer.prototype.dispatchCommand = function (letter, args_str) {
@@ -447,6 +534,9 @@ ScreenBuffer.prototype.dispatchCommand = function (letter, args_str) {
   case 'P':
     this.deleteCharacters(args_str);
     break;
+  case 'X':
+    this.eraseCharacters(args_str);
+    break;
   case 'd':
     this.cursorToLine(args_str);
     break;
@@ -462,27 +552,14 @@ ScreenBuffer.prototype.dispatchCommand = function (letter, args_str) {
   case 'M':
     this.deleteLines(args_str);
     break;
+  case 'b':
+    this.repeatLastCharacter(args_str);
+    break;
   default:
     console.log(`unknown command letter ${letter} args ${args_str}`);
   }
   return this.fc_normal;
 };
-  // if (c === 'H') {
-  //   return
-  // } else if (c === '2') {
-  //   return function (c) {
-  //     if (c === 'J') {
-  //       this.clear();
-  //       return this.fc_normal;
-  //     } else {
-  //       console.log(`got ${c} while expecting J`);
-  //       return this.fc_normal;
-  //     }
-  //   };
-  // } else {
-  //   console.log(`got ${c} while expecting H or J`);
-  //   return this.fc_normal;
-  // }
 
 ScreenBuffer.prototype.operatingSystemCommand = function (arg_str) {
   var args = arg_str.split(/;/);
