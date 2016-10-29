@@ -1,0 +1,36 @@
+#screen { background-color: #d0d0d0 }
+
+.blink { animation: blinker 1s linear infinite }
+.bold { font-weight: bold }
+.italic { font-style: italic }
+.fast-blink { animation: blinker 0.3s linear infinite }
+.crossed-out { text-decoration: line-through }
+.underline { text-decoration: underline }
+.faint { opacity: 0.5 }
+.conceal { opacity: 0 }
+/* .cursor { animation: blinker 1s linear infinite } */
+.cursor { background-color: magenta !important; color: white !important }
+.text-color-0 { color: #303030 }
+.text-color-1 { color: #be1137 }
+.text-color-2 { color: #29732c }
+.text-color-3 { color: #c95c26 }
+.text-color-4 { color: #2a5aa2 }
+.text-color-5 { color: #cd3a93 }
+.text-color-6 { color: #078692 }
+.text-color-7 { color: #d0d0d0 }
+.background-color-0 { background-color: #303030 }
+.background-color-1 { background-color: #be1137 }
+.background-color-2 { background-color: #29732c }
+.background-color-3 { background-color: #c95c26 }
+.background-color-4 { background-color: #2a5aa2 }
+.background-color-5 { background-color: #cd3a93 }
+.background-color-6 { background-color: #078692 }
+.background-color-7 { background-color: #d0d0d0 }
+
+/* @keyframes cursor-blinker { */
+/*     0% { background-color: magenta; color: #d0d0d0 } */
+/* } */
+
+@keyframes blinker {
+    50% { opacity: 0 }
+}

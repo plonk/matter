@@ -1,0 +1,6 @@
+12345678
+[1Iabc
+xyz[1Iabc
+[2Iabc
+xyz[2Iabc
+abc	def

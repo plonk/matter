@@ -1,9 +1,13 @@
+'use strict';
+
 var eastasianwidth = require('eastasianwidth');
 
 function GraphicAttrs() {
   // 色インデックスで指定するのはよくないな。
   this.reset();
 }
+
+const GraphicAttrs_FIELDS = ['textColor', 'backgroundColor', 'bold', 'italic', 'blink', 'fastBlink', 'fraktur', 'crossedOut', 'underline', 'faint', 'conceal']
 
 GraphicAttrs.prototype.reset = function () {
   this.textColor = 0;
@@ -21,34 +25,69 @@ GraphicAttrs.prototype.reset = function () {
 
 GraphicAttrs.prototype.clone = function () {
   var res = new GraphicAttrs();
-  for (var attr of ['textColor', 'backgroundColor', 'bold', 'italic', 'blink', 'fastBlink', 'fraktur', 'crossedOut', 'underline', 'faint', 'conceal']) {
+  for (var attr of GraphicAttrs_FIELDS) {
     res[attr] = this[attr];
   }
   return res;
 };
 
+GraphicAttrs.prototype.equals = function (other) {
+  for (var attr of GraphicAttrs_FIELDS) {
+    if (this[attr] !== other[attr]) {
+      return false;
+    }
+  }
+  return true;
+};
+
 function Cell() {
-  this.character = ' ';
+  this.character = '\x00';
   this.broken = false;
   this.attrs = new GraphicAttrs();
 }
 
+Cell.prototype.clone = function () {
+  var res = new Cell();
+  res.character = this.character;
+  res.broken = this.broken;
+  res.attrs = this.attrs.clone();
+  return res;
+};
+
+Cell.prototype.equals = function (other) {
+  return this.character === other.character &&
+    this.broken === other.broken &&
+    this.attrs.equals(other.attrs);
+};
+
 function ScreenBuffer(term, columns, rows) {
   if (columns <= 0) throw RangeError('columns');
   if (rows <= 0) throw RangeError('rows');
-
   this.columns = columns;
   this.rows = rows;
-  this.buffer = Array.from(Array(columns * rows), () => new Cell());
+  this.term = term;
+
+  this.fullReset();
+}
+
+ScreenBuffer.prototype.fullReset = function () {
+  this.buffer = Array.from(Array(this.columns * this.rows), () => new Cell());
+  this.backBuffer = Array.from(Array(this.columns * this.rows), () => new Cell());
   this.cursor_x = 0;
   this.cursor_y = 0;
   this.interpretFn = ScreenBuffer.prototype.fc_normal;
   this.graphicAttrs = new GraphicAttrs();
   this.title = '';
   this.isCursorVisible = true;
-  this.term = term;
   this.lastGraphicCharacter = ' ';
-}
+  this.insertMode = false;
+  this.savedCursorX = 0;
+  this.savedCursorY = 0;
+  this.alternateScreen = false;
+  this.scrollingRegionTop = 0;
+  this.scrollingRegionBottom = this.rows - 1;
+  this.originModeRelative = false;
+};
 
 ScreenBuffer.prototype.resize = function (columns, rows) {
   throw 'not implemented';
@@ -71,6 +110,7 @@ ScreenBuffer.prototype.advanceCursor = function () {
   }
 };
 
+// FIXME: マルチ幅文字
 ScreenBuffer.prototype.backCursor = function () {
   if (this.cursor_x === 0) {
     if (this.cursor_y === 0) {
@@ -84,12 +124,16 @@ ScreenBuffer.prototype.backCursor = function () {
   }
 };
 
+// scroll up one.
 ScreenBuffer.prototype.lineFeed = function () {
   var len = this.buffer.length;
+  // scrolling region minus the top line
+  var scrollingRegion = this.buffer.slice((this.scrollingRegionTop + 1) * this.columns,
+                                          (this.scrollingRegionBottom + 1) * this.columns);
+  scrollingRegion = scrollingRegion.concat(Array.from(Array(this.columns), () => new Cell())); // add one blank line at bottom.
 
-  this.buffer = this.buffer
-    .slice(this.columns)
-    .concat(Array.from(Array(this.columns), () => new Cell()));
+  Array.prototype.splice.apply(this.buffer, [this.scrollingRegionTop * this.columns,
+                                             (this.scrollingRegionBottom - this.scrollingRegionTop + 1) * this.columns].concat(scrollingRegion));
 
   if (this.buffer.length !== len) {
     throw 'error';
@@ -103,8 +147,10 @@ ScreenBuffer.prototype.lineFeed = function () {
 ScreenBuffer.prototype.fc_normal = function (c) {
   if (c === '\x08') { // ^H
     this.backCursor();
-  } else if (c === '\x0a') { // LF ^J
-    if (this.cursor_y === this.rows - 1) {
+  } else if (c === '\x0a' || // LF ^J
+             c === '\x0c' || // FF ^L
+             c === '\x0b') { // VT ^K
+    if (this.cursor_y === this.scrollingRegionBottom) { // FIXME: スクロール領域の外はどう取り扱うの？
       this.lineFeed();
     } else {
       this.cursor_y += 1;
@@ -145,12 +191,31 @@ ScreenBuffer.prototype.addCharacter = function (c) {
   this.lastGraphicCharacter = c;
   switch (wcwidth(c)) {
   case 1:
+    if (this.insertMode) {
+      this.insertBlankCharacters('1');
+    }
     var cell = this.buffer[this.cursorOffset()];
     cell.attrs = this.graphicAttrs.clone();
-    cell.character = c;
-    this.advanceCursor();
+    var wasBlank = cell.character === '\x00';
+    if (this.cursor_x === this.columns - 1) {
+      if (wasBlank) {
+        cell.character = c;
+      } else {
+        this.advanceCursor();
+        cell = this.buffer[this.cursorOffset()];
+        cell.attrs = this.graphicAttrs.clone();
+        cell.character = c;
+        this.advanceCursor();
+      }
+    } else {
+      cell.character = c;
+      this.advanceCursor();
+    }
     break;
   case 2:
+    if (this.insertMode) {
+      this.insertBlankCharacters('2');
+    }
     this.buffer[this.cursorOffset()].attrs = this.graphicAttrs.clone();
     this.buffer[this.cursorOffset()].character = c;
     this.buffer[this.cursorOffset() + 1].attrs = this.graphicAttrs.clone();
@@ -173,7 +238,9 @@ ScreenBuffer.prototype.repeatLastCharacter = function (args_str) {
 
 // 画面のクリア。カーソル位置はそのまま。
 ScreenBuffer.prototype.clear = function (from, to) {
-  this.buffer = Array.from(Array(this.columns * this.rows), () => new Cell());
+  for (var i = from; i < to; i++) {
+    this.buffer[i] = new Cell();
+  }
 };
 
 ScreenBuffer.prototype.fc_controlSequenceIntroduced = function (c) {
@@ -182,36 +249,9 @@ ScreenBuffer.prototype.fc_controlSequenceIntroduced = function (c) {
     if (/^[\x40-\x7e]$/.exec(c)) {
       this.dispatchCommand(c, args);
       return this.fc_normal;
-    } else if (/^[0-9]$/.exec(c) || c === ';') {
+    } else if (/^[?>0-9;]$/.exec(c)) {
       args += c;
       return parsingControlSequence;
-    } else if (c === '?') {
-      return function (c) {
-        if (c === '2') {
-          return function (c) {
-            if (c === '5') {
-              return function (c) {
-                if (c === 'l') {
-                  // hide
-                  this.isCursorVisible = false;
-                } else if (c === 'h') {
-                  // show
-                  this.isCursorVisible = true;
-                } else {
-                  console.log(`unexpected character ${c}`);
-                }
-                return this.fc_normal;
-              };
-            } else {
-              console.log(`unexpected character ${c}`);
-              return this.fc_normal;
-            }
-          };
-        } else {
-          console.log(`unexpected character ${c}`);
-          return this.fc_normal;
-        }
-      };
     } else {
       console.log(`unexpected character ${c}`);
       return this.fc_normal;
@@ -235,9 +275,10 @@ ScreenBuffer.prototype.eraseDisplay = function (args_str) {
   switch (args_str || '0') {
   case '0':
     this.clear(this.cursor_y * this.columns + this.cursor_x, this.columns * this.rows);
+    break;
   case '1':
-    // カーソルを含まない？
-    this.clear(0, this.cursor_y * this.columns + this.cursor_x);
+    // カーソル位置を含む
+    this.clear(0, this.cursor_y * this.columns + this.cursor_x + 1);
     break;
   case '2':
     this.clear(0, this.columns * this.rows);
@@ -355,23 +396,29 @@ ScreenBuffer.prototype.selectGraphicRendition = function (args_str) {
 
 ScreenBuffer.prototype.cursorForward = function (args_str) {
   var num = +(args_str || '1');
+  if (num === 0) num = 1;
 
   this.cursor_x = Math.min(this.cursor_x + num, this.columns - 1);
 };
 
 ScreenBuffer.prototype.cursorBackward = function (args_str) {
   var num = +(args_str || '1');
+  if (num === 0) num = 1;
 
   this.cursor_x = Math.max(this.cursor_x - num, 0);
 };
 
 ScreenBuffer.prototype.cursorDown = function (args_str) {
   var num = +(args_str || '1');
+  if (num === 0) num = 1;
+
   this.cursor_y = Math.min(this.cursor_y + num, this.rows - 1);
 };
 
 ScreenBuffer.prototype.cursorUp = function (args_str) {
   var num = +(args_str || '1');
+  if (num === 0) num = 1;
+
   this.cursor_y = Math.max(this.cursor_y - num, 0);
 };
 
@@ -383,9 +430,9 @@ ScreenBuffer.prototype.eraseInLine = function (args_str) {
       this.buffer[this.cursor_y * this.columns + i] = new Cell();
     }
     break;
-  case 1: // to the beginning
-    // FIXME: カーソル位置の文字を消すのか不明。
-    for (var i = 0; i < this.cursor_x; i++) {
+  case 1: // from the beginning
+    // カーソル位置の文字も消す
+    for (var i = 0; i <= this.cursor_x; i++) {
       this.buffer[this.cursor_y * this.columns + i] = new Cell();
     }
     break;
@@ -473,35 +520,257 @@ ScreenBuffer.prototype.insertBlankCharacters = function (args_str) {
   }
 };
 
-ScreenBuffer.prototype.insertLines = function (args_str) {
-  var num = +(args_str || '1');
-  var newLines = Array.from(Array(num * this.columns), () => new Cell());
+function spliceArray(ary, start, deleteCount, ary2) {
+  var removed = Array.prototype.splice.apply(ary, [start, deleteCount].concat(ary2));
+  return removed;
+};
 
-  var args = [this.cursor_y * this.columns, 0].concat(newLines);
-  Array.prototype.splice.apply(this.buffer, args);
+ScreenBuffer.prototype.scrollDown = function (y1, y2, nlines) {
+  var len = (y2 - y1 + 1) * this.columns;
+  var region = this.buffer.slice(y1 * this.columns, y1 * this.columns + len);
 
-  this.buffer = this.buffer.slice(0, this.columns * this.rows);
+  Array.prototype.unshift.apply(region, Array.from(Array(nlines * this.columns), () => new Cell()));
+  region = region.slice(0, len);
+
+  spliceArray(this.buffer, y1 * this.columns, len, region);
+};
+
+ScreenBuffer.prototype.scrollUp = function (y1, y2, nlines) {
+  console.log(['scrollUp', y1, y2, nlines]);
+  if (this.buffer.length !== this.columns * this.rows)
+    throw 'bug';
+
+  var len = (y2 - y1 + 1) * this.columns;
+  var region = this.buffer.slice(y1 * this.columns, y1 * this.columns + len);
+
+  region = region.slice(nlines * this.columns).concat(Array.from(Array(nlines * this.columns), () => new Cell()));
+  spliceArray(this.buffer, y1 * this.columns, len, region);
 
   if (this.buffer.length !== this.columns * this.rows)
-    console.log('bug');
+    throw 'bug';
+
+};
+
+ScreenBuffer.prototype.insertLines = function (args_str) {
+  if (this.buffer.length !== this.columns * this.rows)
+    throw 'bug';
+
+  if (this.cursor_y < this.scrollingRegionTop || this.cursor_y > this.scrollingRegionBottom) {
+    console.log(`IL cursor outside scrolling region`);
+    return;
+  }
+
+  var num = +(args_str || '1');
+  num = Math.min(this.scrollingRegionBottom - this.cursor_y + 1, num);
+
+  this.scrollDown(this.cursor_y, this.scrollingRegionBottom, num);
+
+  if (this.buffer.length !== this.columns * this.rows)
+    throw 'bug';
 };
 
 ScreenBuffer.prototype.deleteLines = function (args_str) {
-  var num = +(args_str || '1');
+  if (this.cursor_y < this.scrollingRegionTop || this.cursor_y > this.scrollingRegionBottom) {
+    console.log(`IL cursor outside scrolling region`);
+    return;
+  }
 
-  this.buffer.splice(this.cursor_y * this.columns, num * this.columns);
-  this.buffer = this.buffer.concat(Array.from(Array(num * this.columns), () => new Cell()));
+  var num = +(args_str || '1');
+  num = Math.min(this.scrollingRegionBottom - this.cursor_y + 1, num);
+
+  this.scrollUp(this.cursor_y, this.scrollingRegionBottom, num);
 
   if (this.buffer.length !== this.columns * this.rows)
-    console.log('bug');
+    throw 'bug';
+};
+
+ScreenBuffer.prototype.setMode = function (args_str) {
+  var num = +args_str;
+
+  switch (num) {
+  case 4:
+    this.insertMode = true;
+    break;
+  case 2:
+  case 12:
+  case 20:
+    console.log(`setMode: unimplemented mode ${args_str}`);
+  default:
+    console.log(`setMode: unknown mode ${args_str}`);
+  }
+};
+
+ScreenBuffer.prototype.resetMode = function (args_str) {
+  var num = +args_str;
+
+  switch (num) {
+  case 4:
+    this.insertMode = false;
+    break;
+  case 2:
+  case 12:
+  case 20:
+    console.log(`resetMode: unimplemented mode ${args_str}`);
+  default:
+    console.log(`resetMode: unknown mode ${args_str}`);
+  }
+};
+
+ScreenBuffer.prototype.sendPrimaryDeviceAttributes = function (args_str) {
+  var num = +(args_str || '0');
+
+  if (num === 0) {
+    this.term.write('\x1b[?1;2c');
+  } else {
+    console.log(`send primary device attributes ${args_str}`);
+  }
+};
+
+ScreenBuffer.prototype.sendSecondaryDeviceAttributes = function (args_str) {
+  var num = +(args_str || '0');
+
+  if (num === 0) {
+    this.term.write('\x1b[>85;95;0c');
+  } else {
+    console.log(`send secondary device attributes ${args_str}`);
+  }
+};
+
+ScreenBuffer.prototype.useAlternateScreenBuffer = function () {
+  if (this.alternateScreen)
+    return;
+
+  var tmp = this.buffer;
+  this.buffer = this.backBuffer;
+  this.backBuffer = tmp;
+  this.alternateScreen = true;
+};
+
+ScreenBuffer.prototype.useNormalScreenBuffer = function () {
+  if (!this.alternateScreen)
+    return;
+
+  var tmp = this.buffer;
+  this.buffer = this.backBuffer;
+  this.backBuffer = tmp;
+  this.alternateScreen = false;
+};
+
+ScreenBuffer.prototype.privateModeSet = function (args_str) {
+  var num = +args_str;
+
+  switch (num) {
+  case 1:
+    console.log('application cursor keys');
+    break;
+  case 6:
+    this.originModeRelative = true;
+    this.goToHomePosition();
+    break;
+  case 25:
+    this.isCursorVisible = true;
+    break;
+  case 47:
+    this.useAlternateScreenBuffer();
+    break;
+  default:
+    console.log(`CSI ? ${args_str} h`);
+  }
+};
+
+ScreenBuffer.prototype.privateModeReset = function (args_str) {
+  var num = +args_str;
+
+  switch (num) {
+  case 1:
+    console.log('normal cursor keys');
+    break;
+  case 6:
+    this.originModeRelative = false;
+    this.goToHomePosition();
+  case 25:
+    this.isCursorVisible = false;
+    break;
+  case 47:
+    this.useNormalScreenBuffer();
+    break;
+  default:
+    console.log(`CSI ? ${args_str} l`);
+  }
+};
+
+
+ScreenBuffer.prototype.dispatchCommandQuestion = function (letter, args_str) {
+  switch (letter) {
+  case 'l':
+    this.privateModeReset(args_str);
+    break;
+  case 'h':
+    this.privateModeSet(args_str);
+    break;
+  default:
+    console.log(`unknown ? command letter ${letter} args ${args_str}`);
+  }
+  return this.fc_normal;
+};
+
+ScreenBuffer.prototype.dispatchCommandGreater = function (letter, args_str) {
+  switch (letter) {
+  case 'c':
+    this.sendSecondaryDeviceAttributes();
+    break;
+  default:
+    console.log(`unknown > command letter ${letter} args ${args_str}`);
+  }
+  return this.fc_normal;
+};
+
+ScreenBuffer.prototype.goToHomePosition = function () {
+  this.cursor_x = 0;
+
+  if (this.originModeRelative) {
+    this.cursor_y = this.scrollingRegionTop;
+  } else {
+    this.cursor_y = 0;
+  }
+};
+
+ScreenBuffer.prototype.setTopBottomMargins = function (args_str) {
+  if (args_str === '')
+    args_str = '1:' + this.rows;
+
+  var args = args_str.split(/;/).map((elt) => +elt);
+  var top = args[0];
+  var bottom = args[1];
+
+  if (top >= bottom ||
+     top < 1 ||
+     bottom > this.rows) {
+    console.log(`DECSTBM invalid range ${args_str}`);
+    return;
+  }
+
+  this.scrollingRegionTop = top - 1;
+  this.scrollingRegionBottom = bottom - 1;
+
+  this.goToHomePosition();
 };
 
 ScreenBuffer.prototype.dispatchCommand = function (letter, args_str) {
+  if (args_str[0] === '?') {
+    this.dispatchCommandQuestion(letter, args_str.slice(1));
+    return this.fc_normal;
+  } else if (args_str[0] === '>') {
+    this.dispatchCommandGreater(letter, args_str.slice(1));
+    return this.fc_normal;
+  }
+
   switch (letter) {
   case 'G':
     this.cursorHorizontalAbsolute(args_str);
     break;
   case 'H':
+  case 'f':
     this.cursorPosition(args_str);
     break;
   case 'I':
@@ -555,6 +824,18 @@ ScreenBuffer.prototype.dispatchCommand = function (letter, args_str) {
   case 'b':
     this.repeatLastCharacter(args_str);
     break;
+  case 'h':
+    this.setMode(args_str);
+    break;
+  case 'l':
+    this.resetMode(args_str);
+    break;
+  case 'c':
+    this.sendPrimaryDeviceAttributes(args_str);
+    break;
+  case 'r':
+    this.setTopBottomMargins(args_str);
+    break;
   default:
     console.log(`unknown command letter ${letter} args ${args_str}`);
   }
@@ -585,11 +866,87 @@ ScreenBuffer.prototype.fc_startOperatingSystemCommand = function (c) {
   return parsingOperatingSystemCommand.call(this, c);
 };
 
+ScreenBuffer.prototype.saveCursor = function () {
+  this.savedCursorX = this.cursor_x;
+  this.savedCursorY = this.cursor_y;
+};
+
+ScreenBuffer.prototype.restoreCursor = function () {
+  this.cursor_x = this.savedCursorX;
+  this.cursor_y = this.savedCursorY;
+};
+
+ScreenBuffer.prototype.index = function () {
+  if (this.cursor_y !== 0) {
+    this.cursor_y += 1;
+  } else {
+    this.scrollUp(0, this.rows - 1, 1);
+  }
+};
+
+ScreenBuffer.prototype.reverseIndex = function () {
+  if (this.cursor_y !== 0) {
+    this.cursor_y -= 1;
+  } else {
+    this.scrollDown(0, this.rows - 1, 1);
+  }
+};
+
+ScreenBuffer.prototype.screenAlignmentDisplay = function () {
+  this.buffer = Array.from(this.buffer, () => {
+    var cell = new Cell();
+    cell.character = 'E';
+    return cell;
+  });
+};
+
+ScreenBuffer.prototype.dispatchCommandNumber = function (c) {
+  switch (c) {
+  case '8':
+    this.screenAlignmentDisplay();
+    break;
+  default:
+    console.log(`unknown ESC # ${c}`);
+  }
+  return this.fc_normal;
+};
+
 ScreenBuffer.prototype.fc_esc = function (c) {
   if (c === '[') {
     return this.fc_controlSequenceIntroduced;
   } else if (c === ']') {
     return this.fc_startOperatingSystemCommand;
+  } else if (c === '7') {
+    this.saveCursor();
+    return this.fc_normal;
+  } else if (c === '8') {
+    this.restoreCursor();
+    return this.fc_normal;
+  } else if (c === '=') {
+    console.log('application keypad mode');
+    return this.fc_normal;
+  } else if (c === '>') {
+    console.log('normal keypad mode');
+    return this.fc_normal;
+  } else if (c === 'c') {
+    this.fullReset();
+    return this.fc_normal;
+  } else if (c === 'M') {
+    this.reverseIndex();
+    return this.fc_normal;
+  } else if (c === '#') {
+    return this.dispatchCommandNumber;
+  } else if (c === 'E') {
+    this.cursor_x = 0;
+    if (this.cursor_y === this.rows - 1) {
+      this.scrollUp(0, this.rows - 1, 1);
+    } else {
+      this.cursor_y += 1;
+    }
+    return this.fc_normal;
+  } else if (c === 'D') {
+    this.index();
+    return this.fc_normal;
   } else {
     console.log(`got ${c} while expecting [`);
     return this.fc_normal;
@@ -600,10 +957,29 @@ ScreenBuffer.prototype.feedCharacter = function (character) {
   this.interpretFn = this.interpretFn(character);
 };
 
+function deepCopyBuffer(buffer) {
+  return buffer.map(cell => cell.clone());
+}
+
+ScreenBuffer.prototype.changedCells = function (oldBuffer, newBuffer) {
+  var positions = [];
+
+  for (var y = 0; y < this.rows; y++) {
+    for (var x = 0; x < this.columns; x++) {
+      if (!oldBuffer[y * this.columns + x].equals(newBuffer[y * this.columns + x])) {
+        positions.push([y, x]);
+      }
+    }
+  }
+  return positions;
+};
+
 ScreenBuffer.prototype.feed = function (data) {
+  var oldBuffer = deepCopyBuffer(this.buffer);
   for (var char of data) {
     this.feedCharacter(char);
   }
+  return this.changedCells(oldBuffer, this.buffer);
 };
 
 module.exports = {

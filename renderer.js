@@ -46,77 +46,47 @@ function toFraktur (char) {
   }
 }
 
-function renderScreen() {
+function renderScreen(changedCells) {
   var screen = document.getElementById('screen');
 
-  for (var y = 0; y < screenBuffer.rows; y++) {
-    for (var x = 0; x < screenBuffer.columns; x++) {
-      var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
-      var char = (cell.character === ' ') ? '\xa0' : cell.character;
-      char = emojione.unicodeToImage(escapeHtml(char));
+  for (var indices of changedCells) {
+    var y = indices[0];
+    var x = indices[1];
+    var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
+    var char = (cell.character === '\x00' || cell.character === ' ') ? '\xa0' : cell.character;
+    char = emojione.unicodeToImage(escapeHtml(char));
 
-      var view = $(`#${y}-${x}`);
-      var classes = [];
+    var view = $(`#${y}-${x}`);
+    var classes = [];
 
-      view.removeClass();
-      if (cell.attrs.bold) classes.push('bold');
-      if (cell.attrs.italic) classes.push('italic');
-      if (cell.attrs.blink) classes.push('blink');
-      if (cell.attrs.fastBlink) classes.push('fast-blink');
-      if (cell.attrs.fraktur) {
-        char = toFraktur(char);
-      }
-      if (cell.attrs.crossedOut) classes.push('crossed-out');
-      if (cell.attrs.underline) classes.push('underline');
-      if (cell.attrs.faint) classes.push('faint');
-      if (cell.attrs.conceal) classes.push('conceal');
-      
-      if (y === screenBuffer.cursor_y && x === screenBuffer.cursor_x &&
-          screenBuffer.isCursorVisible) {
-        classes.push('cursor');
-      }
-      classes.push(`text-color-${cell.attrs.textColor}`);
-      classes.push(`background-color-${cell.attrs.backgroundColor}`);
+    view.removeClass();
+    if (cell.attrs.bold)       classes.push('bold');
+    if (cell.attrs.italic)     classes.push('italic');
+    if (cell.attrs.blink)      classes.push('blink');
+    if (cell.attrs.fastBlink)  classes.push('fast-blink');
+    if (cell.attrs.fraktur)    { char = toFraktur(char); }
+    if (cell.attrs.crossedOut) classes.push('crossed-out');
+    if (cell.attrs.underline)  classes.push('underline');
+    if (cell.attrs.faint)      classes.push('faint');
+    if (cell.attrs.conceal)    classes.push('conceal');
 
-      view.addClass(classes.join(' '));
+    classes.push(`text-color-${cell.attrs.textColor}`);
+    classes.push(`background-color-${cell.attrs.backgroundColor}`);
 
-      view.html(char);
-    }
+    view.addClass(classes.join(' '));
+
+    view.html(char);
+  }
+
+  $('#screen div').removeClass('cursor');
+  if (screenBuffer.isCursorVisible) {
+    $(`#${screenBuffer.cursor_y}-${screenBuffer.cursor_x}`).addClass('cursor');
   }
 }
 
-// function renderScreen() {
-//   var html = '';
-//   for (var y = 0; y < screenBuffer.rows; y++) {
-//     for (var x = 0; x < screenBuffer.columns; x++) {
-//       var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
-//       // console.log( cell.character );
-//       var char = (cell.character === ' ') ? '\xa0' : cell.character;
-//       var buf = emojione.unicodeToImage(escapeHtml(char));
-//       if (cell.attrs.bold) {
-//         buf = `<b>${buf}</b>`;
-//       }
-
-//       if (y === screenBuffer.cursor_y && x === screenBuffer.cursor_x &&
-//           screenBuffer.isCursorVisible) {
-//         buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; background-color: magenta; color: white">${buf}</div>`;
-//       } else {
-//         buf = `<div style="line-height: 20px; height: 20px; vertical-align: middle; display: inline-block; color: ${colorName(cell.attrs.textColor)}; background-color: ${colorName(cell.attrs.backgroundColor)}">${buf}</div>`;
-//       }
-//       html += buf;
-//     }
-//     html += '<br>';
-//   }
-
-//   // console.log(['html', html]);
-//   var pre = document.getElementById('screen');
-//   pre.innerHTML = html;
-//   //  pre.scrollTop = pre.scrollHeight;
-// }
-
 function addData(data) {
-  screenBuffer.feed(data);
-  renderScreen();
+  var changedCells = screenBuffer.feed(data);
+  renderScreen(changedCells);
 
   var title = document.querySelector('title');
   title.text = screenBuffer.title;
@@ -219,7 +189,7 @@ function populate(screen) {
 }
 
 var term = pty.spawn('bash', [], {
-  name: 'ansi',
+  name: 'xterm-color',
   cols: 80,
   rows: 30,
   cwd: process.cwd(),
@@ -246,4 +216,14 @@ window.onload = () => {
 
   var screen = document.getElementById('screen');
   populate(screen);
+  function allPositions() {
+    var res = [];
+    for (var y = 0; y < screenBuffer.rows; y++) {
+      for (var x = 0; x < screenBuffer.columns; x++) {
+        res.push([y, x]);
+      }
+    }
+    return res;
+  }
+  renderScreen(allPositions());
 };

@@ -1,0 +1,10 @@
+Bold		[1mHoge[0m
+Faint		[2mHoge[0m
+Italic		[3mHoge[0m
+Underline	[4mHoge[0m
+Blink		[5mHoge[0m
+Fast Blink	[6m🐓≡[0m
+Reverse Video	[7mHoge[0m
+Conceal		[8mHoge[0m
+Crossed Out 	[9mHoge[0m
+Fraktur		[20mHoge[0m
