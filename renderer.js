@@ -47,8 +47,6 @@ function toFraktur (char) {
 }
 
 function renderScreen(changedCells) {
-  var screen = document.getElementById('screen');
-
   for (var indices of changedCells) {
     var y = indices[0];
     var x = indices[1];
@@ -176,22 +174,22 @@ function inspect(str) {
   return out;
 }
 
-function populate(screen) {
+function populate(scr, cols, rows) {
   var str = '';
 
-  for (var y = 0; y < 30; y++) {
-    for (var x = 0; x < 80; x++) {
+  for (var y = 0; y < rows; y++) {
+    for (var x = 0; x < cols; x++) {
       str += `<div id="${y}-${x}" style="overflow: visible; line-height: 20px; height: 20px; vertical-align: middle; display: inline-block"></div>`;
     }
     str += '<br>';
   }
-  screen.innerHTML = str;
+  scr.innerHTML = str;
 }
 
 var term = pty.spawn('bash', [], {
   name: 'xterm-color',
   cols: 80,
-  rows: 30,
+  rows: 24,
   cwd: process.cwd(),
   env: process.env
 });
@@ -205,7 +203,15 @@ term.on('close', function () {
   window.close();
 });
 
-var screenBuffer = new ScreenBuffer(term, 80, 30);
+var screenElt;
+
+var screenBuffer = new ScreenBuffer(80, 30, {
+  write: (data) => term.write(data),
+  resize: (cols, rows) => {
+    term.resize(cols, rows);
+    populate(screenElt, term.cols, term.rows);
+  }
+});
 
 window.onload = () => {
   var body = document.querySelector('body');
@@ -214,8 +220,8 @@ window.onload = () => {
     typeIn(e);
   });
 
-  var screen = document.getElementById('screen');
-  populate(screen);
+  screenElt = document.getElementById('screen');
+  populate(screenElt, term.cols, term.rows);
   function allPositions() {
     var res = [];
     for (var y = 0; y < screenBuffer.rows; y++) {

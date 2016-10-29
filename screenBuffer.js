@@ -60,12 +60,17 @@ Cell.prototype.equals = function (other) {
     this.attrs.equals(other.attrs);
 };
 
-function ScreenBuffer(term, columns, rows) {
+function ScreenBuffer(columns, rows, callbacks) {
   if (columns <= 0) throw RangeError('columns');
   if (rows <= 0) throw RangeError('rows');
   this.columns = columns;
   this.rows = rows;
-  this.term = term;
+  this.callbacks = {
+    write: function(data) {},
+    resize: function (cols, rows) {}
+  };
+  this.callbacks.write = callbacks.write;
+  this.callbacks.resize = callbacks.resize;
 
   this.fullReset();
 }
@@ -87,6 +92,7 @@ ScreenBuffer.prototype.fullReset = function () {
   this.scrollingRegionTop = 0;
   this.scrollingRegionBottom = this.rows - 1;
   this.originModeRelative = false;
+  this.forceUpdate = true;
 };
 
 ScreenBuffer.prototype.resize = function (columns, rows) {
@@ -450,7 +456,7 @@ ScreenBuffer.prototype.eraseInLine = function (args_str) {
 ScreenBuffer.prototype.deviceStatusReport = function (args_str) {
   var y = this.cursor_y + 1;
   var x = this.cursor_x + 1;
-  this.term.write(`\x1b[${y};${x}R`);
+  this.callbacks.write(`\x1b[${y};${x}R`);
 };
 
 ScreenBuffer.prototype.cursorToLine = function (args_str) {
@@ -620,7 +626,7 @@ ScreenBuffer.prototype.sendPrimaryDeviceAttributes = function (args_str) {
   var num = +(args_str || '0');
 
   if (num === 0) {
-    this.term.write('\x1b[?1;2c');
+    this.callbacks.write('\x1b[?1;2c');
   } else {
     console.log(`send primary device attributes ${args_str}`);
   }
@@ -630,7 +636,7 @@ ScreenBuffer.prototype.sendSecondaryDeviceAttributes = function (args_str) {
   var num = +(args_str || '0');
 
   if (num === 0) {
-    this.term.write('\x1b[>85;95;0c');
+    this.callbacks.write('\x1b[>85;95;0c');
   } else {
     console.log(`send secondary device attributes ${args_str}`);
   }
@@ -656,12 +662,23 @@ ScreenBuffer.prototype.useNormalScreenBuffer = function () {
   this.alternateScreen = false;
 };
 
+ScreenBuffer.prototype.setScreenSize = function (columns, rows) {
+  this.columns = columns;
+  this.rows = rows;
+
+  this.fullReset();
+  this.callbacks.resize(columns, rows);
+};
+
 ScreenBuffer.prototype.privateModeSet = function (args_str) {
   var num = +args_str;
 
   switch (num) {
   case 1:
     console.log('application cursor keys');
+    break;
+  case 3:
+    this.setScreenSize(132, 24);
     break;
   case 6:
     this.originModeRelative = true;
@@ -684,6 +701,9 @@ ScreenBuffer.prototype.privateModeReset = function (args_str) {
   switch (num) {
   case 1:
     console.log('normal cursor keys');
+    break;
+  case 3:
+    this.setScreenSize(80, 24);
     break;
   case 6:
     this.originModeRelative = false;
@@ -974,12 +994,27 @@ ScreenBuffer.prototype.changedCells = function (oldBuffer, newBuffer) {
   return positions;
 };
 
+function allPositions(sb) {
+  var res = [];
+  for (var y = 0; y < sb.rows; y++) {
+    for (var x = 0; x < sb.columns; x++) {
+      res.push([y, x]);
+    }
+  }
+  return res;
+}
+
 ScreenBuffer.prototype.feed = function (data) {
   var oldBuffer = deepCopyBuffer(this.buffer);
   for (var char of data) {
     this.feedCharacter(char);
   }
-  return this.changedCells(oldBuffer, this.buffer);
+  if (this.forceUpdate) {
+    this.forceUpdate = false;
+    return allPositions(this);
+  } else {
+    return this.changedCells(oldBuffer, this.buffer);
+  }
 };
 
 module.exports = {
