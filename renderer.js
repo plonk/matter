@@ -46,39 +46,61 @@ function toFraktur (char) {
   }
 }
 
+function withDefault(value, defaultValue) {
+  if (value === undefined || value === null) {
+    return defaultValue;
+  } else {
+    return value;
+  }
+}
+
 function renderScreen(changedCells) {
+  var defaultTextColor       = screenBuffer.getDefaultTextColor();
+  var defaultBackgroundColor = screenBuffer.getDefaultBackgroundColor();
+
   for (var indices of changedCells) {
     var y = indices[0];
     var x = indices[1];
     var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
-    var char = (cell.character === '\x00' || cell.character === ' ') ? '\xa0' : cell.character;
+    var char = (cell.character === ' ') ? '\xa0' : cell.character;
     char = emojione.unicodeToImage(escapeHtml(char));
 
-    var view = $(`#${y}-${x}`);
+    var fg_view = $(`#fg-${y}-${x}`);
+    var bg_view = $(`#bg-${y}-${x}`);
     var classes = [];
 
-    view.removeClass();
+    fg_view.removeClass();
+    bg_view.removeClass();
+
     if (cell.attrs.bold)       classes.push('bold');
     if (cell.attrs.italic)     classes.push('italic');
-    if (cell.attrs.blink)      classes.push('blink');
-    if (cell.attrs.fastBlink)  classes.push('fast-blink');
+    if (cell.attrs.blink)      fg_view.addClass('blink');
+    if (cell.attrs.fastBlink)  fg_view.addClass('fast-blink');
     if (cell.attrs.fraktur)    { char = toFraktur(char); }
     if (cell.attrs.crossedOut) classes.push('crossed-out');
     if (cell.attrs.underline)  classes.push('underline');
     if (cell.attrs.faint)      classes.push('faint');
     if (cell.attrs.conceal)    classes.push('conceal');
 
-    classes.push(`text-color-${cell.attrs.textColor}`);
-    classes.push(`background-color-${cell.attrs.backgroundColor}`);
+    var fg = withDefault(cell.attrs.textColor, defaultTextColor);
+    var bg = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
+    if (cell.attrs.bold)
+      fg += 8;
+    if (cell.attrs.reverseVideo) {
+      classes.push(`text-color-${bg}`);
+      classes.push(`background-color-${fg}`);
+    } else {
+      classes.push(`text-color-${fg}`);
+      classes.push(`background-color-${bg}`);
+    }
 
-    view.addClass(classes.join(' '));
-
-    view.html(char);
+    bg_view.addClass(classes.join(' '));
+    fg_view.html(char);
   }
 
   $('#screen div').removeClass('cursor');
   if (screenBuffer.isCursorVisible) {
-    $(`#${screenBuffer.cursor_y}-${screenBuffer.cursor_x}`).addClass('cursor');
+    $(`#bg-${screenBuffer.cursor_y}-${screenBuffer.cursor_x}`).addClass('cursor');
   }
 }
 
@@ -179,7 +201,7 @@ function populate(scr, cols, rows) {
 
   for (var y = 0; y < rows; y++) {
     for (var x = 0; x < cols; x++) {
-      str += `<div id="${y}-${x}" style="overflow: visible; line-height: 20px; height: 20px; vertical-align: middle; display: inline-block"></div>`;
+      str += `<div id="bg-${y}-${x}" style="overflow: visible; line-height: 1.15em; height: 1.15em; vertical-align: middle; display: inline-block"><span id="fg-${y}-${x}"></div></div>`;
     }
     str += '<br>';
   }
@@ -205,7 +227,7 @@ term.on('close', function () {
 
 var screenElt;
 
-var screenBuffer = new ScreenBuffer(80, 30, {
+var screenBuffer = new ScreenBuffer(term.cols, term.rows, {
   write: (data) => term.write(data),
   resize: (cols, rows) => {
     term.resize(cols, rows);
