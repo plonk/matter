@@ -2,7 +2,7 @@
 
 var pty = require('pty');
 var {ipcRenderer} = require('electron')
-var {ScreenBuffer} = require('./screenBuffer')
+var {Receiver} = require('./receiver')
 
 // -----------
 
@@ -55,13 +55,13 @@ function withDefault(value, defaultValue) {
 }
 
 function renderScreen(changedCells) {
-  var defaultTextColor       = screenBuffer.getDefaultTextColor();
-  var defaultBackgroundColor = screenBuffer.getDefaultBackgroundColor();
+  var defaultTextColor       = receiver.getDefaultTextColor();
+  var defaultBackgroundColor = receiver.getDefaultBackgroundColor();
 
   for (var indices of changedCells) {
     var y = indices[0];
     var x = indices[1];
-    var cell = screenBuffer.buffer[y*screenBuffer.columns + x];
+    var cell = receiver.buffer.getCellAt(y, x);
     var char = (cell.character === ' ') ? '\xa0' : cell.character;
     char = emojione.unicodeToImage(escapeHtml(char));
 
@@ -99,17 +99,17 @@ function renderScreen(changedCells) {
   }
 
   $('#screen div').removeClass('cursor');
-  if (screenBuffer.isCursorVisible) {
-    $(`#bg-${screenBuffer.cursor_y}-${screenBuffer.cursor_x}`).addClass('cursor');
+  if (receiver.isCursorVisible) {
+    $(`#bg-${receiver.cursor_y}-${receiver.cursor_x}`).addClass('cursor');
   }
 }
 
 function addData(data) {
-  var changedCells = screenBuffer.feed(data);
+  var changedCells = receiver.feed(data);
   renderScreen(changedCells);
 
   var title = document.querySelector('title');
-  title.text = screenBuffer.title;
+  title.text = receiver.title;
   // console.log('rendered');
 }
 
@@ -227,7 +227,7 @@ term.on('close', function () {
 
 var screenElt;
 
-var screenBuffer = new ScreenBuffer(term.cols, term.rows, {
+var receiver = new Receiver(term.cols, term.rows, {
   write: (data) => term.write(data),
   resize: (cols, rows) => {
     term.resize(cols, rows);
@@ -246,8 +246,8 @@ window.onload = () => {
   populate(screenElt, term.cols, term.rows);
   function allPositions() {
     var res = [];
-    for (var y = 0; y < screenBuffer.rows; y++) {
-      for (var x = 0; x < screenBuffer.columns; x++) {
+    for (var y = 0; y < receiver.rows; y++) {
+      for (var x = 0; x < receiver.columns; x++) {
         res.push([y, x]);
       }
     }
