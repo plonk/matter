@@ -54,7 +54,19 @@ function withDefault(value, defaultValue) {
   }
 }
 
+function updateRowAttributes() {
+  for (var y = 0; y < receiver.rows; y++) {
+    var row = $(`#row-${y}`);
+    row.removeClass();
+    row.addClass('row-' + receiver.buffer.getLine(y).getType());
+  }
+}
+
 function renderScreen(changedCells) {
+  // rowの更新。
+  updateRowAttributes();
+
+  // cellの更新。
   var defaultTextColor       = receiver.getDefaultTextColor();
   var defaultBackgroundColor = receiver.getDefaultBackgroundColor();
 
@@ -200,10 +212,11 @@ function populate(scr, cols, rows) {
   var str = '';
 
   for (var y = 0; y < rows; y++) {
+    str += `<div id="row-${y}">`;
     for (var x = 0; x < cols; x++) {
-      str += `<div id="bg-${y}-${x}" style="overflow: visible; line-height: 1.15em; height: 1.15em; vertical-align: middle; display: inline-block"><span id="fg-${y}-${x}"></div></div>`;
+      str += `<div id="bg-${y}-${x}" style="overflow: visible; line-height: 1.15em; height: 1.15em; vertical-align: middle; display: inline-block"><span id="fg-${y}-${x}"></span></div>`;
     }
-    str += '<br>';
+    str += '</div>';
   }
   scr.innerHTML = str;
 }

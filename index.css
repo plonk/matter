@@ -11,6 +11,11 @@
 /* .cursor { animation: blinker 1s linear infinite } */
 .cursor { background-color: magenta !important; color: white !important }
 
+.row-normal { }
+.row-double-width { transform-origin: left; transform: scale(2, 1) }
+.row-top-half {}
+.row-bottom-half {}
+
 .text-color-0  { color: rgb(0,0,0)       }
 .text-color-1  { color: rgb(194,54,33)   }
 .text-color-2  { color: rgb(37,188,36)   }

@@ -1001,6 +1001,12 @@ Receiver.prototype.dispatchCommandNumber = function (c) {
   }
 
   switch (c) {
+  case '5': // Single-Width Line
+    this.buffer.getLine(this.cursor_y).setType('normal');
+    break;
+  case '6': // Double-Width Line
+    this.buffer.getLine(this.cursor_y).setType('double-width');
+    break;
   case '8':
     this.screenAlignmentDisplay();
     break;
