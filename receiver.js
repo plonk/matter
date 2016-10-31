@@ -408,25 +408,27 @@ Receiver.prototype.selectGraphicRendition = function (args_str) {
       this.graphicAttrs.bold = false;
       i++;
     } else if (arg === 22) { // normal color/intensity
-      console.log(`unsupported SGR arg ${args[i]}`);
+      this.graphicAttrs.faint = false;
       i++;
     } else if (arg === 23) { // neither italic nor fraktur
-      console.log(`unsupported SGR arg ${args[i]}`);
+      this.graphicAttrs.italic = false;
+      this.graphicAttrs.fractur = false;
       i++;
     } else if (arg === 24) { // underline: none
-      console.log(`unsupported SGR arg ${args[i]}`);
+      this.graphicAttrs.underline = false;
       i++;
     } else if (arg === 25) { // blink: off
-      console.log(`unsupported SGR arg ${args[i]}`);
+      this.graphicAttrs.blink = false;
+      this.graphicAttrs.fastBlink = false;
       i++;
     } else if (arg === 27) { // image: positive
-      console.log(`unsupported SGR arg ${args[i]}`);
+      this.graphicAttrs.reverseVideo = false;
       i++;
     } else if (arg === 28) { // reveal
-      console.log(`unsupported SGR arg ${args[i]}`);
+      this.graphicAttrs.conceal = false;
       i++;
     } else if (arg === 29) { // not crossed out
-      console.log(`unsupported SGR arg ${args[i]}`);
+      this.graphicAttrs.crossedOut = false;
       i++;
     } else if (arg >= 30 && arg <= 37) {
       this.graphicAttrs.textColor = arg - 30;
