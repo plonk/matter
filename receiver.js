@@ -696,9 +696,7 @@ Receiver.prototype.setScreenSize = function (columns, rows) {
   this.callbacks.resize(columns, rows);
 };
 
-Receiver.prototype.privateModeSet = function (args_str) {
-  var num = +args_str;
-
+Receiver.prototype.doPrivateModeSet = function (num) {
   switch (num) {
   case 1:
     console.log('application cursor keys');
@@ -728,13 +726,27 @@ Receiver.prototype.privateModeSet = function (args_str) {
     this.useAlternateReceiver();
     break;
   default:
-    console.log(`CSI ? ${args_str} h`);
+    console.log(`CSI ? ${num} h`);
   }
 };
 
-Receiver.prototype.privateModeReset = function (args_str) {
-  var num = +args_str;
+function parseParametersDefaultingToZero(args_str) {
+  return args_str.split(/;/).map(field => {
+    if (field === "") {
+      return 0;
+    } else {
+      return +field;
+    }
+  });
+}
 
+Receiver.prototype.privateModeSet = function (args_str) {
+  for (var num of parseParametersDefaultingToZero(args_str)) {
+    this.doPrivateModeSet(num);
+  }
+};
+
+Receiver.prototype.doPrivateModeReset = function (num) {
   switch (num) {
   case 1:
     console.log('normal cursor keys');
@@ -763,7 +775,13 @@ Receiver.prototype.privateModeReset = function (args_str) {
     this.useNormalReceiver();
     break;
   default:
-    console.log(`CSI ? ${args_str} l`);
+    console.log(`CSI ? ${num} l`);
+  }
+};
+
+Receiver.prototype.privateModeReset = function (args_str) {
+  for (var num of parseParametersDefaultingToZero(args_str)) {
+    this.doPrivateModeReset(num);
   }
 };
 
@@ -913,6 +931,7 @@ Receiver.prototype.dispatchCommand = function (letter, args_str) {
 };
 
 Receiver.prototype.operatingSystemCommand = function (arg_str) {
+  // FIXME: OSコマンドにセミコロンを含めることができないと思われる。
   var args = arg_str.split(/;/);
 
   if (args[0] === '0') { // set title bar
