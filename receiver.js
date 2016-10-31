@@ -543,6 +543,8 @@ Receiver.prototype.eraseCharacters = function (args_str) {
 
 Receiver.prototype.cursorHorizontalAbsolute = function (args_str) {
   var num = +(args_str || '1');
+  if (num === 0)
+    num = 1;
 
   this.cursor_x = num - 1;
 };
