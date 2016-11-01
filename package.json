@@ -1,7 +1,7 @@
 {
-  "name": "electron-terminal",
-  "version": "1.0.0",
-  "description": "",
+  "name": "matter",
+  "version": "0.0.1",
+  "description": "terminal emulator",
   "main": "main.js",
   "scripts": {
     "start": "nodejs main.js",
@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "eastasianwidth": "^0.1.1",
     "pty": "0.0.0"
   }
 }

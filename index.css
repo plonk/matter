@@ -1,4 +1,4 @@
-body { background-color: rgb(39, 39, 39) }
+body { background-color: rgb(39, 39, 39); overflow-x: hidden }
 #screen { background-color: rgb(39, 39, 39) }
 
 .blink { animation: blinker 1s linear infinite }
@@ -14,8 +14,10 @@ body { background-color: rgb(39, 39, 39) }
 
 .row-normal { }
 .row-double-width { transform-origin: left; transform: scale(2, 1) }
-.row-top-half {}
-.row-bottom-half {}
+.row-top-half { display: block; transform-origin: left top; transform: scale(2, 1); overflow: hidden }
+.row-top-half td { transform-origin: left top; transform: scale(1, 2) }
+.row-bottom-half { display: block; transform-origin: left; transform: scale(2, 1); overflow: hidden }
+.row-bottom-half td { transform-origin: left bottom; transform: scale(1, 2) }
 
 .emojione { margin: 0; height: 1em; }
 

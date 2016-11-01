@@ -14,7 +14,7 @@ function createWindow() {
 
 app.on('ready', () => {
   createWindow();
-  mainWindow.webContents.openDevTools()
+  // mainWindow.webContents.openDevTools()
 });
 
 app.on('window-all-closed', () => {

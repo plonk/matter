@@ -1,5 +1,7 @@
 'use strict';
 
+var {withDefault} = require('./util');
+
 // グラフィック属性。文字の修飾状態。
 function GraphicAttrs() {
   // 色インデックスで指定するのはよくないな。
@@ -41,10 +43,17 @@ GraphicAttrs.prototype.equals = function (other) {
 };
 
 // 文字セル。
-function Cell() {
-  this.character = ' ';
-  this.broken = false;
-  this.attrs = new GraphicAttrs();
+function Cell(proto) {
+  if (!proto)
+    proto = {};
+
+  this.character = withDefault(proto.character, ' ');
+  this.broken = withDefault(proto.broken, false);
+  if (proto.attrs) {
+    this.attrs = proto.attrs.clone();
+  } else {
+    this.attrs = new GraphicAttrs();
+  }
 }
 
 Cell.prototype.clone = function () {
@@ -106,6 +115,11 @@ Row.prototype.setCellAt = function (index, cell) {
   this.checkInRange(index);
 
   this.array[index] = cell;
+};
+
+Row.prototype.clear = function () {
+  this.array = createArrayThus(this.length, () => new Cell());
+  this.setType('normal');
 };
 
 // スクリーンバッファー。文字セルの二次元配列のようなもの。
@@ -191,6 +205,43 @@ ScreenBuffer.prototype.clone = function () {
 
   return newBuffer;
 };
+
+ScreenBuffer.prototype.clearToEnd = function (y, x) {
+  if (x !== 0) {
+    for (var i = x; i < this.columns; i++) {
+      this.buffer[y].setCellAt(i, new Cell());
+    }
+    if (y === this.rows - 1)
+      return;
+    y += 1;
+  }
+
+  for (var j = y; j < this.rows; j++) {
+    this.buffer[j].clear();
+  }
+};
+
+ScreenBuffer.prototype.clearFromBeginning = function (y, x) {
+  if (x !== this.columns - 1) {
+    for (var i = 0; i <= x; i++) {
+      this.buffer[y].setCellAt(i, new Cell());
+    }
+    if (y === 0)
+      return;
+    y -= 1;
+  }
+
+  for (var j = 0; j <= y; j++) {
+    this.buffer[j].clear();
+  }
+};
+
+ScreenBuffer.prototype.clearAll = function () {
+  for (var i = 0; i < this.rows; i++) {
+    this.buffer[i].clear();
+  }
+};
+
 
 module.exports = {
   GraphicAttrs: GraphicAttrs,

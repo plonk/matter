@@ -9,11 +9,15 @@ function Receiver(columns, rows, callbacks) {
   this.columns = columns;
   this.rows = rows;
   this.callbacks = {
-    write: function(data) {},
-    resize: function (cols, rows) {}
+    write:         function(data) {},
+    resize:        function(cols, rows) {},
+    cursorKeyMode: function(mode) {},
+    beep:          function() {},
   };
-  this.callbacks.write = callbacks.write;
-  this.callbacks.resize = callbacks.resize;
+  this.callbacks.write         = callbacks.write;
+  this.callbacks.resize        = callbacks.resize;
+  this.callbacks.cursorKeyMode = callbacks.cursorKeyMode;
+  this.callbacks.beep          = callbacks.beep;
 
   this.fullReset();
 }
@@ -55,6 +59,7 @@ Receiver.prototype.fullReset = function () {
   this.reverseScreenMode = false;
   this.lastOperationWasPrint = false;
   this.printed = false;
+  this.cursorBlink = true;
 };
 
 Receiver.prototype.resetTabStops = function () {
@@ -177,7 +182,7 @@ Receiver.prototype.processControlCharacter = function (c) {
   } else if (c === '\x09') { // Tab ^I
     this.tabStopForward(1);
   } else if (c === '\x07') { // BEL ^G
-    ;
+    this.callbacks.beep();
   } else if (c === '\x0e') { // SO ^N
     // Shift Out
     this.characterSet = 1;
@@ -325,14 +330,17 @@ Receiver.prototype.cursorPosition = function (args_str) {
 Receiver.prototype.eraseDisplay = function (args_str) {
   switch (args_str || '0') {
   case '0':
-    this.clear(this.cursor_y * this.columns + this.cursor_x, this.columns * this.rows);
+    this.buffer.clearToEnd(this.cursor_y, this.cursor_x);
     break;
   case '1':
     // カーソル位置を含む
-    this.clear(0, this.cursor_y * this.columns + this.cursor_x + 1);
+    this.buffer.clearFromBeginning(this.cursor_y, this.cursor_x);
     break;
   case '2':
-    this.clear(0, this.columns * this.rows);
+    this.buffer.clearAll();
+    break;
+  case '3': // xterm; erase saved lines
+    console.log('erase saved lines');
     break;
   default:
     console.log(`Error: ED ${args_str}`);
@@ -485,18 +493,21 @@ Receiver.prototype.eraseInLine = function (args_str) {
   switch (num) {
   case 0: // to the end
     for (var i = this.cursor_x; i < this.columns; i++) {
-      this.buffer.setCellAt(this.cursor_y, i, new Cell());
+      this.buffer.setCellAt(this.cursor_y, i,
+                           new Cell({attrs: this.graphicAttrs}));
     }
     break;
   case 1: // from the beginning
     // カーソル位置の文字も消す
     for (var i = 0; i <= this.cursor_x; i++) {
-      this.buffer.setCellAt(this.cursor_y, i, new Cell());
+      this.buffer.setCellAt(this.cursor_y, i,
+                           new Cell({attrs: this.graphicAttrs}));
     }
     break;
   case 2: // entire line
     for (var i = 0; i < this.columns; i++) {
-      this.buffer.setCellAt(this.cursor_y, i, new Cell());
+      this.buffer.setCellAt(this.cursor_y, i,
+                           new Cell({attrs: this.graphicAttrs}));
     }
     break;
   default:
@@ -539,7 +550,8 @@ Receiver.prototype.eraseCharacters = function (args_str) {
   num = Math.min(num, this.columns - this.cursor_x);
 
   for (var i = 0; i < num; i++) {
-    this.buffer.setCellAt(this.cursor_y, this.cursor_x + i, new Cell());
+    this.buffer.setCellAt(this.cursor_y, this.cursor_x + i,
+                          new Cell({attrs: this.graphicAttrs}));
   }
 };
 
@@ -665,7 +677,7 @@ Receiver.prototype.sendSecondaryDeviceAttributes = function (args_str) {
   }
 };
 
-Receiver.prototype.useAlternateReceiver = function () {
+Receiver.prototype.useAlternateScreenBuffer = function () {
   if (this.alternateScreen)
     return;
 
@@ -675,7 +687,7 @@ Receiver.prototype.useAlternateReceiver = function () {
   this.alternateScreen = true;
 };
 
-Receiver.prototype.useNormalReceiver = function () {
+Receiver.prototype.useNormalScreenBuffer = function () {
   if (!this.alternateScreen)
     return;
 
@@ -700,6 +712,7 @@ Receiver.prototype.doPrivateModeSet = function (num) {
   switch (num) {
   case 1:
     console.log('application cursor keys');
+    this.callbacks.cursorKeyMode('application');
     break;
   case 3:
     this.setScreenSize(132, 24);
@@ -719,11 +732,19 @@ Receiver.prototype.doPrivateModeSet = function (num) {
   case 7:
     this.autoWrap = true;
     break;
+  case 12:
+    console.log('start blinking cursor');
+    break;
   case 25:
     this.isCursorVisible = true;
     break;
   case 47:
-    this.useAlternateReceiver();
+    this.useAlternateScreenBuffer();
+    break;
+  case 1049:
+    this.saveCursor();
+    this.useAlternateScreenBuffer();
+    this.buffer.clearAll();
     break;
   default:
     console.log(`CSI ? ${num} h`);
@@ -750,6 +771,7 @@ Receiver.prototype.doPrivateModeReset = function (num) {
   switch (num) {
   case 1:
     console.log('normal cursor keys');
+    this.callbacks.cursorKeyMode('normal');
     break;
   case 3:
     this.setScreenSize(80, 24);
@@ -768,11 +790,18 @@ Receiver.prototype.doPrivateModeReset = function (num) {
   case 7:
     this.autoWrap = false;
     break;
+  case 12:
+    console.log('stop blinking cursor');
+    break;
   case 25:
     this.isCursorVisible = false;
     break;
   case 47:
-    this.useNormalReceiver();
+    this.useNormalScreenBuffer();
+    break;
+  case 1049:
+    this.useNormalScreenBuffer();
+    this.restoreCursor();
     break;
   default:
     console.log(`CSI ? ${num} l`);
@@ -839,6 +868,22 @@ Receiver.prototype.setTopBottomMargins = function (args_str) {
   this.scrollingRegionBottom = bottom - 1;
 
   this.goToHomePosition();
+};
+
+Receiver.prototype.cmd_scrollUp = function (args_str) {
+  var num = +(args_str || '1');
+  if (num === 0)
+    num = 1;
+
+  this.scrollUp(this.scrollingRegionTop, this.scrollingRegionBottom, num);
+};
+
+Receiver.prototype.cmd_scrollDown = function (args_str) {
+  var num = +(args_str || '1');
+  if (num === 0)
+    num = 1;
+
+  this.scrollDown(this.scrollingRegionTop, this.scrollingRegionBottom, num);
 };
 
 Receiver.prototype.dispatchCommand = function (letter, args_str) {
@@ -923,6 +968,12 @@ Receiver.prototype.dispatchCommand = function (letter, args_str) {
     break;
   case 'g':
     this.tabulationClear(args_str);
+    break;
+  case 'S':
+    this.cmd_scrollUp(args_str);
+    break;
+  case 'T':
+    this.cmd_scrollDown(args_str);
     break;
   default:
     console.log(`unknown command letter ${letter} args ${args_str}`);
@@ -1024,6 +1075,12 @@ Receiver.prototype.dispatchCommandNumber = function (c) {
   }
 
   switch (c) {
+  case '3': // Top Half
+    this.buffer.getLine(this.cursor_y).setType('top-half');
+    break;
+  case '4': // Bottom Half
+    this.buffer.getLine(this.cursor_y).setType('bottom-half');
+    break;
   case '5': // Single-Width Line
     this.buffer.getLine(this.cursor_y).setType('normal');
     break;

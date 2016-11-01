@@ -2,6 +2,7 @@
 
 function Transmitter(term) {
   this.term = term;
+  this.cursorKeyMode = 'normal';
 };
 
 // Dec Hex    Dec Hex    Dec Hex  Dec Hex  Dec Hex  Dec Hex   Dec Hex   Dec Hex
@@ -49,11 +50,18 @@ var CHARACTER_TABLE = {
   'F12'        : '\x1b[24~',
 };
 
-function toCharacter(key, ctrlKey, altKey) {
+var APPLICATION_FUNCTION_KEY_TABLE = {
+  'ArrowUp'    : '\x1bOA',
+  'ArrowDown'  : '\x1bOB',
+  'ArrowRight' : '\x1bOC',
+  'ArrowLeft'  : '\x1bOD',
+};
+
+Transmitter.prototype.toCharacter = function (key, ctrlKey, altKey) {
   if (altKey) {
-    return "\x1b" + toCharacter(key, ctrlKey, false);
+    return "\x1b" + this.toCharacter(key, ctrlKey, false);
   } else if (ctrlKey) {
-    var char = toCharacter(key, false, false).toUpperCase();
+    var char = this.toCharacter(key, false, false).toUpperCase();
     if (char.length === 1 && ord(char) >= 0x40 && ord(char) <= 0x5f) {
       return chr(ord(char) - 0x40);
     } else if (char === '/') {
@@ -68,6 +76,9 @@ function toCharacter(key, ctrlKey, altKey) {
   } else {
     if (key.length === 1) {
       return key;
+    } else if (this.cursorKeyMode === 'application' &&
+               APPLICATION_FUNCTION_KEY_TABLE[key] !== undefined) {
+      return APPLICATION_FUNCTION_KEY_TABLE[key];
     } else if (CHARACTER_TABLE[key] !== undefined) {
       return CHARACTER_TABLE[key];
     } else {
@@ -75,16 +86,16 @@ function toCharacter(key, ctrlKey, altKey) {
     }
   }
   throw 'unreachable';
-}
+};
 
 Transmitter.prototype.typeIn = function (ev) {
   if (ev.key === 'Control' || ev.key === 'Shift' || ev.key === 'Alt')
     return;
 
-  var str = toCharacter(ev.key, ev.ctrlKey, ev.altKey);
+  var str = this.toCharacter(ev.key, ev.ctrlKey, ev.altKey);
   // console.log(inspect(str));
   if (str.length !== 0)
-    term.write(str);
+    this.term.write(str);
 };
 
 module.exports = { Transmitter: Transmitter };

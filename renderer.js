@@ -1,9 +1,10 @@
 'use strict';
 
 var pty = require('pty');
-var {ipcRenderer} = require('electron')
-var {Receiver} = require('./receiver')
-var {Transmitter} = require ('./transmitter');
+var {ipcRenderer, remote} = require('electron')
+var {Receiver}    = require('./receiver')
+var {Transmitter} = require('./transmitter');
+var {withDefault} = require('./util');
 
 // -----------
 
@@ -44,14 +45,6 @@ function toFraktur (char) {
     return char;
   } else {
     return fraktur[index];
-  }
-}
-
-function withDefault(value, defaultValue) {
-  if (value === undefined || value === null) {
-    return defaultValue;
-  } else {
-    return value;
   }
 }
 
@@ -122,8 +115,11 @@ function addData(data) {
   renderScreen(changedCells);
 
   var title = document.querySelector('title');
-  title.text = receiver.title;
+  var altbuf = receiver.alternateScreen ? '[AltBuf]' : '';
+  title.text = `matter ${altbuf} - ${receiver.title}`;
   // console.log('rendered');
+
+  adjustWindowSize();
 }
 
 function inspect(str) {
@@ -153,7 +149,7 @@ function populate(scr, cols, rows) {
   for (var y = 0; y < rows; y++) {
     str += `<table style="border-spacing: 0"><tr id="row-${y}" style="line-height: 130%">`;
     for (var x = 0; x < cols; x++) {
-      str += `<td id="bg-${y}-${x}" style="padding: 0; overflow: visible"><span id="fg-${y}-${x}"></span></td>`;
+      str += `<td id="bg-${y}-${x}" style="padding: 0"><span id="fg-${y}-${x}"></span></td>`;
     }
     str += '</tr></table>';
   }
@@ -184,10 +180,30 @@ var receiver = new Receiver(term.cols, term.rows, {
   resize: (cols, rows) => {
     term.resize(cols, rows);
     populate(screenElt, term.cols, term.rows);
+  },
+  cursorKeyMode: (mode) => {
+    transmitter.cursorKeyMode = mode;
+  },
+  beep: () => {
+    new Audio('beep.wav').play();
   }
 });
 
 var transmitter = new Transmitter(term);
+
+function adjustWindowSize() {
+  var height = $('#screen').height() + 43;
+  var browserWindow = remote.getCurrentWindow();
+
+  console.log(height, browserWindow.getSize()[1]);
+  if (height > browserWindow.getSize()[1]) {
+    // remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, height);
+    remote.getCurrentWindow().setSize(browserWindow.getSize()[0], height)
+  }
+}
+
+var desiredWindowWidth;
+var desiredWindowHeight;
 
 window.onload = () => {
   var body = document.querySelector('body');
@@ -209,4 +225,9 @@ window.onload = () => {
     return res;
   }
   renderScreen(allPositions());
+
+  desiredWindowWidth = $('#screen table').width() + 18;
+  desiredWindowHeight = $('#screen').height() + 43;
+  remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, desiredWindowHeight);
+  remote.getCurrentWindow().setSize(desiredWindowWidth, desiredWindowHeight)
 };
