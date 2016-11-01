@@ -165,7 +165,7 @@ var term = pty.spawn('bash', [], {
 });
 
 term.on('data', function(data) {
-  console.log(['output', inspect(data)]);
+  // console.log(['output', inspect(data)]);
   addData(data);
 });
 
@@ -195,7 +195,7 @@ function adjustWindowSize() {
   var height = $('#screen').height() + 43;
   var browserWindow = remote.getCurrentWindow();
 
-  console.log(height, browserWindow.getSize()[1]);
+  // console.log(height, browserWindow.getSize()[1]);
   if (height > browserWindow.getSize()[1]) {
     // remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, height);
     remote.getCurrentWindow().setSize(browserWindow.getSize()[0], height)
