@@ -60,6 +60,7 @@ Receiver.prototype.fullReset = function () {
   this.lastOperationWasPrint = false;
   this.printed = false;
   this.cursorBlink = true;
+  this.smoothScrollMode = false;
 };
 
 Receiver.prototype.resetTabStops = function () {
@@ -718,6 +719,7 @@ Receiver.prototype.doPrivateModeSet = function (num) {
     this.setScreenSize(132, 24);
     break;
   case 4:
+    this.smoothScrollMode = true;
     console.log('smooth scroll mode');
     break;
   case 5:
@@ -777,6 +779,7 @@ Receiver.prototype.doPrivateModeReset = function (num) {
     this.setScreenSize(80, 24);
     break;
   case 4:
+    this.smoothScrollMode = false;
     console.log('jump scroll mode');
     break;
   case 5:
@@ -1260,39 +1263,37 @@ function deepCopyBuffer(buffer) {
   return buffer.clone();
 }
 
-Receiver.prototype.changedCells = function (oldBuffer, newBuffer) {
-  var positions = [];
-
-  for (var y = 0; y < this.rows; y++) {
-    for (var x = 0; x < this.columns; x++) {
-      if (!oldBuffer.getCellAtOffset(y * this.columns + x).equals(newBuffer.getCellAtOffset(y * this.columns + x))) {
-        positions.push([y, x]);
+Receiver.prototype.changedRows = function () {
+  if (this.forceUpdate) {
+    return this.allRows();
+  } else {
+    var res = [];
+    for (var i = 0; i < this.rows; i++) {
+      var line = this.buffer.getLine(i);
+      if (line.dirty) {
+        res.push(i);
       }
     }
+    return res;
   }
-  return positions;
 };
 
-function allPositions(sb) {
+Receiver.prototype.allRows = function () {
   var res = [];
-  for (var y = 0; y < sb.rows; y++) {
-    for (var x = 0; x < sb.columns; x++) {
-      res.push([y, x]);
-    }
+  for (var i = 0; i < this.rows; i++) {
+    res.push(i);
   }
   return res;
-}
+};
 
 Receiver.prototype.feed = function (data) {
-  var oldBuffer = deepCopyBuffer(this.buffer);
+  // フラグのリセット
+  this.forceUpdate = false;
+  this.buffer.resetFlags();
+  this.backBuffer.resetFlags();
+
   for (var char of data) {
     this.feedCharacter(char);
-  }
-  if (this.forceUpdate) {
-    this.forceUpdate = false;
-    return allPositions(this);
-  } else {
-    return this.changedCells(oldBuffer, this.buffer);
   }
 };
 

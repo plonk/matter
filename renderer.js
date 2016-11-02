@@ -56,7 +56,9 @@ function updateRowAttributes() {
   }
 }
 
-function renderScreen(changedCells) {
+function renderScreen(changedRows) {
+  console.log(changedRows);
+
   // rowの更新。
   updateRowAttributes();
 
@@ -64,60 +66,54 @@ function renderScreen(changedCells) {
   var defaultTextColor       = receiver.getDefaultTextColor();
   var defaultBackgroundColor = receiver.getDefaultBackgroundColor();
 
-  for (var indices of changedCells) {
-    var y = indices[0];
-    var x = indices[1];
-    var cell = receiver.buffer.getCellAt(y, x);
-    var char = (cell.character === ' ') ? '\xa0' : cell.character;
-    char = emojione.unicodeToImage(escapeHtml(char));
+  for (var y of changedRows) {
+    for (var x  = 0; x < receiver.columns; x++) {
+      var cell = receiver.buffer.getCellAt(y, x);
+      var char = (cell.character === ' ') ? '\xa0' : cell.character;
+      char = emojione.unicodeToImage(escapeHtml(char));
 
-    var fg_view = $(`#fg-${y}-${x}`);
-    var bg_view = $(`#bg-${y}-${x}`);
-    var classes = [];
+      var fg_view = $(`#fg-${y}-${x}`);
+      var bg_view = $(`#bg-${y}-${x}`);
+      var classes = [];
 
-    fg_view.removeClass();
-    bg_view.removeClass();
+      fg_view.removeClass();
+      bg_view.removeClass();
 
-    if (cell.attrs.bold)       classes.push('bold');
-    if (cell.attrs.italic)     classes.push('italic');
-    if (cell.attrs.blink)      fg_view.addClass('blink');
-    if (cell.attrs.fastBlink)  fg_view.addClass('fast-blink');
-    if (cell.attrs.fraktur)    { char = toFraktur(char); }
-    if (cell.attrs.crossedOut) classes.push('crossed-out');
-    if (cell.attrs.underline)  classes.push('underline');
-    if (cell.attrs.faint)      classes.push('faint');
-    if (cell.attrs.conceal)    classes.push('conceal');
+      if (cell.attrs.bold)       classes.push('bold');
+      if (cell.attrs.italic)     classes.push('italic');
+      if (cell.attrs.blink)      fg_view.addClass('blink');
+      if (cell.attrs.fastBlink)  fg_view.addClass('fast-blink');
+      if (cell.attrs.fraktur)    { char = toFraktur(char); }
+      if (cell.attrs.crossedOut) classes.push('crossed-out');
+      if (cell.attrs.underline)  fg_view.addClass('underline');
+      if (cell.attrs.faint)      classes.push('faint');
+      if (cell.attrs.conceal)    classes.push('conceal');
 
-    var fg = withDefault(cell.attrs.textColor, defaultTextColor);
-    var bg = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
-    if (cell.attrs.bold)
-      fg += 8;
-    if (cell.attrs.reverseVideo) {
-      classes.push(`text-color-${bg}`);
-      classes.push(`background-color-${fg}`);
-    } else {
-      classes.push(`text-color-${fg}`);
-      classes.push(`background-color-${bg}`);
+      var fg = withDefault(cell.attrs.textColor, defaultTextColor);
+      var bg = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
+      if (cell.attrs.bold)
+        fg += 8;
+      if (cell.attrs.reverseVideo) {
+        classes.push(`text-color-${bg}`);
+        classes.push(`background-color-${fg}`);
+      } else {
+        classes.push(`text-color-${fg}`);
+        classes.push(`background-color-${bg}`);
+      }
+
+      bg_view.addClass(classes.join(' '));
+      fg_view.html(char);
     }
-
-    bg_view.addClass(classes.join(' '));
-    fg_view.html(char);
   }
 
-  $('#screen td').removeClass('cursor');
+  $('#screen span').removeClass('cursor');
   if (receiver.isCursorVisible) {
     $(`#bg-${receiver.cursor_y}-${receiver.cursor_x}`).addClass('cursor');
   }
-}
-
-function addData(data) {
-  var changedCells = receiver.feed(data);
-  renderScreen(changedCells);
 
   var title = document.querySelector('title');
   var altbuf = receiver.alternateScreen ? '[AltBuf]' : '';
   title.text = `matter ${altbuf} - ${receiver.title}`;
-  // console.log('rendered');
 
   adjustWindowSize();
 }
@@ -147,11 +143,11 @@ function populate(scr, cols, rows) {
   var str = '';
 
   for (var y = 0; y < rows; y++) {
-    str += `<table style="border-spacing: 0"><tr id="row-${y}" style="line-height: 130%">`;
+    str += `<div id="row-${y}" style="white-space: pre">`;
     for (var x = 0; x < cols; x++) {
-      str += `<td id="bg-${y}-${x}" style="padding: 0"><span id="fg-${y}-${x}"></span></td>`;
+      str += `<span id="bg-${y}-${x}"><span id="fg-${y}-${x}"></span></span>`;
     }
-    str += '</tr></table>';
+    str += '</div>';
   }
   scr.innerHTML = str;
 }
@@ -164,9 +160,46 @@ var term = pty.spawn('bash', [], {
   env: process.env
 });
 
+function arrayUniq(arr) {
+  if (arr.length === 0) {
+    return arr;
+  } else {
+    var first = arr[0];
+
+    return [first].concat(
+      arrayUniq(arr.slice(1).filter(elt => elt !== first))
+    );
+  }
+}
+
 term.on('data', function(data) {
-  // console.log(['output', inspect(data)]);
-  addData(data);
+  term.pause();
+  var acc = [];
+  function iter(_data) {
+    if (_data === '') {
+      acc = acc.concat(receiver.changedRows());
+      renderScreen(arrayUniq(acc));
+      acc = [];
+      term.resume();
+    } else {
+      var char = _data[0];
+
+      receiver.feed(char);
+      if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
+        setTimeout(() => {
+          console.log(Date.now());
+          acc = acc.concat(receiver.changedRows());
+          renderScreen(arrayUniq(acc));
+          acc = [];
+          iter(_data.slice(1));
+        }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
+      } else {
+        acc = acc.concat(receiver.changedRows());
+        iter(_data.slice(1));
+      }
+    }
+  }
+  iter(data);
 });
 
 term.on('close', function () {
@@ -215,18 +248,9 @@ window.onload = () => {
 
   screenElt = document.getElementById('screen');
   populate(screenElt, term.cols, term.rows);
-  function allPositions() {
-    var res = [];
-    for (var y = 0; y < receiver.rows; y++) {
-      for (var x = 0; x < receiver.columns; x++) {
-        res.push([y, x]);
-      }
-    }
-    return res;
-  }
-  renderScreen(allPositions());
+  renderScreen(receiver.changedRows());
 
-  desiredWindowWidth = $('#screen table').width() + 18;
+  desiredWindowWidth = $('#screen #row-0').width() + 18;
   desiredWindowHeight = $('#screen').height() + 43;
   remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, desiredWindowHeight);
   remote.getCurrentWindow().setSize(desiredWindowWidth, desiredWindowHeight)

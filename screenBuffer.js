@@ -83,6 +83,7 @@ function Row(length) {
   this.length = length;
   this._type = 'normal';
   this.array = createArrayThus(length, () => new Cell());
+  this.dirty = true;
 }
 
 const ROW_TYPES = ['normal', 'double-width', 'top-half', 'bottom-half'];
@@ -91,6 +92,7 @@ Row.prototype.setType = function (type) {
   if (!ROW_TYPES.includes(type)) throw RangeError('normal, double-width, top-half, bottom-half');
 
   this._type = type;
+  this.dirty = true;
 };
 
 Row.prototype.getType = function () {
@@ -107,12 +109,14 @@ Row.prototype.checkInRange = function (index) {
 
 Row.prototype.getCellAt = function (index) {
   this.checkInRange(index);
+  this.dirty = true;
 
   return this.array[index];
 };
 
 Row.prototype.setCellAt = function (index, cell) {
   this.checkInRange(index);
+  this.dirty = true;
 
   this.array[index] = cell;
 };
@@ -120,6 +124,7 @@ Row.prototype.setCellAt = function (index, cell) {
 Row.prototype.clear = function () {
   this.array = createArrayThus(this.length, () => new Cell());
   this.setType('normal');
+  this.dirty = true;
 };
 
 // スクリーンバッファー。文字セルの二次元配列のようなもの。
@@ -129,6 +134,7 @@ function ScreenBuffer(columns, rows) {
   this.columns = columns;
   this.rows = rows;
   this.buffer = createArrayThus(this.rows, () => new Row(this.columns));
+  this.scrollPerformed = false; // スクロール操作が実行されたかのフラグ。
 }
 
 ScreenBuffer.prototype.getCellAt = function (y, x) {
@@ -179,6 +185,11 @@ ScreenBuffer.prototype.scrollDown = function (y1, y2, nlines) {
   for (var i = y1; i < y1 + nlines; i++) {
     this.buffer[i] = new Row(this.columns);
   }
+
+  this.scrollPerformed = true;
+  for (var j = y1; j <= y2; j++) {
+    this.buffer[j].dirty = true;
+  }
 };
 
 // METHOD: scrollUp(y1, y2, nlines)
@@ -186,6 +197,11 @@ ScreenBuffer.prototype.scrollUp = function (y1, y2, nlines) {
   this.buffer.copyWithin(y1, y1 + nlines, y2 + 1);
   for (var i = y2 - nlines + 1; i < y2 + 1; i++) {
     this.buffer[i] = new Row(this.columns);
+  }
+
+  this.scrollPerformed = true;
+  for (var j = y1; j <= y2; j++) {
+    this.buffer[j].dirty = true;
   }
 };
 
@@ -242,6 +258,12 @@ ScreenBuffer.prototype.clearAll = function () {
   }
 };
 
+ScreenBuffer.prototype.resetFlags = function () {
+  this.scrollPerformed = false;
+  for (var i = 0; i < this.rows; i++) {
+    this.buffer[i].dirty = false;
+  }
+};
 
 module.exports = {
   GraphicAttrs: GraphicAttrs,
