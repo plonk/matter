@@ -4,8 +4,10 @@ body { background-color: rgb(39, 39, 39); overflow-x: hidden }
     font-family: Ubuntu Mono;
     font-size: 20px;
     width: 100%;
+    margin-right: auto;
 }
-div { line-height: calc(1.33em + 0px) }
+#screen div div { display: inline-block; }
+div { line-height: 26px }
 div > span { padding-top: 3px; padding-bottom: 3px; }
 span { overflow: visible }
 
@@ -20,15 +22,17 @@ span { overflow: visible }
 }
 .faint { opacity: 0.5 }
 .conceal { opacity: 0 }
-/* .cursor { animation: blinker 1s linear infinite } */
+.cursor { animation: blinker 1s linear infinite }
 .cursor { background-color: magenta !important; color: white !important }
 
 .row-normal { }
 .row-double-width { transform-origin: left; transform: scale(2, 1) }
-.row-top-half { display: block; transform-origin: left top; transform: scale(2, 1); overflow: hidden }
-.row-top-half td { transform-origin: left top; transform: scale(1, 2) }
-.row-bottom-half { display: block; transform-origin: left; transform: scale(2, 1); overflow: hidden }
-.row-bottom-half td { transform-origin: left bottom; transform: scale(1, 2) }
+
+.row-top-half { transform-origin: left; transform: scale(2, 1); overflow: hidden }
+.row-top-half > div { transform-origin: left top; transform: scale(1, 2) }
+
+.row-bottom-half { transform-origin: left; transform: scale(2, 1); overflow: hidden }
+.row-bottom-half > div { transform-origin: left bottom; transform: scale(1, 2) }
 
 .emojione { margin: 0; height: 1em; }
 

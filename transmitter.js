@@ -98,4 +98,9 @@ Transmitter.prototype.typeIn = function (ev) {
     this.term.write(str);
 };
 
+
+Transmitter.prototype.paste = function (text) {
+  this.term.write(text);
+}
+
 module.exports = { Transmitter: Transmitter };

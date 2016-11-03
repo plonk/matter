@@ -1,7 +1,7 @@
 'use strict';
 
 var pty = require('pty');
-var {ipcRenderer, remote} = require('electron')
+var {ipcRenderer, remote, clipboard} = require('electron')
 var {Receiver}    = require('./receiver')
 var {Transmitter} = require('./transmitter');
 var {withDefault} = require('./util');
@@ -56,6 +56,119 @@ function updateRowAttributes() {
   }
 }
 
+function createBgStartTag(color) {
+  return `<span class="background-color-${color}">`;
+}
+
+function createFgStartTag(attrs, isCursor) {
+  var classes = [];
+
+  if (attrs.bold)       classes.push('bold');
+  if (attrs.italic)     classes.push('italic');
+  if (attrs.blink)      classes.push('blink');
+  if (attrs.fastBlink)  classes.push('fast-blink');
+  if (attrs.crossedOut) classes.push('crossed-out');
+  if (attrs.underline)  classes.push('underline');
+  if (attrs.faint)      classes.push('faint');
+  if (attrs.conceal)    classes.push('conceal');
+
+  var fg = withDefault(attrs.textColor, receiver.getDefaultTextColor());
+  var bg = withDefault(attrs.backgroundColor, receiver.getDefaultBackgroundColor());
+
+  if (attrs.bold)
+    fg += 8;
+
+  if (attrs.reverseVideo) {
+    classes.push(`text-color-${bg}`);
+  } else {
+    classes.push(`text-color-${fg}`);
+  }
+
+  if (isCursor) {
+    classes.push('cursor');
+  }
+
+  return `<span class="${classes.join(' ')}">`;
+}
+
+function renderRow(y) {
+  var defaultTextColor       = receiver.getDefaultTextColor();
+  var defaultBackgroundColor = receiver.getDefaultBackgroundColor();
+
+  var row = $(`#row-${y} > div`);
+  var str = '';
+  var bgColor = null;
+
+  for (var x  = 0; x < receiver.columns; x++) {
+    var cell = receiver.buffer.getCellAt(y, x);
+    var char = cell.character;
+
+    var newBgColor;
+    if (cell.attrs.reverseVideo) {
+      newBgColor = withDefault(cell.attrs.textColor, defaultTextColor)
+    } else {
+      newBgColor = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
+    }
+
+    if (bgColor !== newBgColor) {
+      if (bgColor !== null) {
+        str += "</span>";
+      }
+      bgColor = newBgColor;
+      str += createBgStartTag(bgColor);
+    }
+
+    if (cell.attrs.fraktur) {
+      char = toFraktur(char);
+    }
+
+    var cursor = (y === receiver.cursor_y &&
+                  x === receiver.cursor_x &&
+                  receiver.isCursorVisible);
+
+    str += createFgStartTag(cell.attrs, cursor);
+    str += emojione.unicodeToImage(escapeHtml(char));
+    str += '</span>';
+
+    // var cell = receiver.buffer.getCellAt(y, x);
+    // var char = emojione.unicodeToImage(escapeHtml(cell.character));
+
+    // var fg_view = $(`#fg-${y}-${x}`);
+    // var bg_view = $(`#bg-${y}-${x}`);
+    // var classes = [];
+
+    // fg_view.removeClass();
+    // bg_view.removeClass();
+
+    // if (cell.attrs.bold)       classes.push('bold');
+    // if (cell.attrs.italic)     classes.push('italic');
+    // if (cell.attrs.blink)      fg_view.addClass('blink');
+    // if (cell.attrs.fastBlink)  fg_view.addClass('fast-blink');
+    // if (cell.attrs.fraktur)    { char = toFraktur(char); }
+    // if (cell.attrs.crossedOut) classes.push('crossed-out');
+    // if (cell.attrs.underline)  fg_view.addClass('underline');
+    // if (cell.attrs.faint)      classes.push('faint');
+    // if (cell.attrs.conceal)    classes.push('conceal');
+
+    // var fg = withDefault(cell.attrs.textColor, defaultTextColor);
+    // var bg = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
+    // if (cell.attrs.bold)
+    //   fg += 8;
+    // if (cell.attrs.reverseVideo) {
+    //   classes.push(`text-color-${bg}`);
+    //   classes.push(`background-color-${fg}`);
+    // } else {
+    //   classes.push(`text-color-${fg}`);
+    //   classes.push(`background-color-${bg}`);
+    // }
+
+    // bg_view.addClass(classes.join(' '));
+    // fg_view.html(char);
+  }
+  str += '</span>';
+  row.html(str);
+}
+
 function renderScreen(changedRows) {
   console.log(changedRows);
 
@@ -63,53 +176,15 @@ function renderScreen(changedRows) {
   updateRowAttributes();
 
   // cellの更新。
-  var defaultTextColor       = receiver.getDefaultTextColor();
-  var defaultBackgroundColor = receiver.getDefaultBackgroundColor();
 
   for (var y of changedRows) {
-    for (var x  = 0; x < receiver.columns; x++) {
-      var cell = receiver.buffer.getCellAt(y, x);
-      var char = (cell.character === ' ') ? '\xa0' : cell.character;
-      char = emojione.unicodeToImage(escapeHtml(char));
-
-      var fg_view = $(`#fg-${y}-${x}`);
-      var bg_view = $(`#bg-${y}-${x}`);
-      var classes = [];
-
-      fg_view.removeClass();
-      bg_view.removeClass();
-
-      if (cell.attrs.bold)       classes.push('bold');
-      if (cell.attrs.italic)     classes.push('italic');
-      if (cell.attrs.blink)      fg_view.addClass('blink');
-      if (cell.attrs.fastBlink)  fg_view.addClass('fast-blink');
-      if (cell.attrs.fraktur)    { char = toFraktur(char); }
-      if (cell.attrs.crossedOut) classes.push('crossed-out');
-      if (cell.attrs.underline)  fg_view.addClass('underline');
-      if (cell.attrs.faint)      classes.push('faint');
-      if (cell.attrs.conceal)    classes.push('conceal');
-
-      var fg = withDefault(cell.attrs.textColor, defaultTextColor);
-      var bg = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
-      if (cell.attrs.bold)
-        fg += 8;
-      if (cell.attrs.reverseVideo) {
-        classes.push(`text-color-${bg}`);
-        classes.push(`background-color-${fg}`);
-      } else {
-        classes.push(`text-color-${fg}`);
-        classes.push(`background-color-${bg}`);
-      }
-
-      bg_view.addClass(classes.join(' '));
-      fg_view.html(char);
-    }
+    renderRow(y);
   }
 
-  $('#screen span').removeClass('cursor');
-  if (receiver.isCursorVisible) {
-    $(`#bg-${receiver.cursor_y}-${receiver.cursor_x}`).addClass('cursor');
-  }
+  // $('#screen span').removeClass('cursor');
+  // if (receiver.isCursorVisible) {
+  //   $(`#fg-${receiver.cursor_y}-${receiver.cursor_x}`).addClass('cursor');
+  // }
 
   var title = document.querySelector('title');
   var altbuf = receiver.alternateScreen ? '[AltBuf]' : '';
@@ -143,11 +218,11 @@ function populate(scr, cols, rows) {
   var str = '';
 
   for (var y = 0; y < rows; y++) {
-    str += `<div id="row-${y}" style="white-space: pre">`;
-    for (var x = 0; x < cols; x++) {
-      str += `<span id="bg-${y}-${x}"><span id="fg-${y}-${x}"></span></span>`;
-    }
-    str += '</div>';
+    str += `<div id="row-${y}" style="white-space: pre"><div>`;
+    // for (var x = 0; x < cols; x++) {
+    //   str += `<span id="bg-${y}-${x}"><span id="fg-${y}-${x}"></span></span>`;
+    // }
+    str += '</div></div>';
   }
   scr.innerHTML = str;
 }
@@ -172,6 +247,26 @@ function arrayUniq(arr) {
   }
 }
 
+function stringFirst(str) {
+  if (str.length === 0) {
+    throw 'empty string';
+  } else if (/^[\uD800-\uDBFF][\uDC00-\uDFFF]/.exec(str)) {
+    return str.slice(0, 2);
+  } else {
+    return str[0];
+  }
+}
+
+function stringRest(str) {
+  if (str.length === 0) {
+    throw 'empty string';
+  } else if (stringFirst(str).length === 2) {
+    return str.slice(2);
+  } else {
+    return str.slice(1);
+  }
+}
+
 term.on('data', function(data) {
   term.pause();
   var acc = [];
@@ -182,7 +277,8 @@ term.on('data', function(data) {
       acc = [];
       term.resume();
     } else {
-      var char = _data[0];
+      var char = stringFirst(_data);
+      var rest = stringRest(_data);
 
       receiver.feed(char);
       if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
@@ -191,11 +287,11 @@ term.on('data', function(data) {
           acc = acc.concat(receiver.changedRows());
           renderScreen(arrayUniq(acc));
           acc = [];
-          iter(_data.slice(1));
+          iter(rest);
         }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
       } else {
         acc = acc.concat(receiver.changedRows());
-        iter(_data.slice(1));
+        iter(rest);
       }
     }
   }
@@ -225,33 +321,67 @@ var receiver = new Receiver(term.cols, term.rows, {
 var transmitter = new Transmitter(term);
 
 function adjustWindowSize() {
-  var height = $('#screen').height() + 43;
+  var height = $('#screen').height() + 43 - 18;
+  var width = $('#screen #row-0 div').width();
   var browserWindow = remote.getCurrentWindow();
 
   // console.log(height, browserWindow.getSize()[1]);
-  if (height > browserWindow.getSize()[1]) {
+  if (height !== browserWindow.getSize()[1] || width !== browserWindow.getSize()[0]) {
     // remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, height);
-    remote.getCurrentWindow().setSize(browserWindow.getSize()[0], height)
+    remote.getCurrentWindow().setSize(width, height)
   }
 }
 
 var desiredWindowWidth;
 var desiredWindowHeight;
 
+var modalShown = false;
+
+function showModal() {
+  $('#myModal').modal('show');
+}
+
+function enterText() {
+  var text = $('#text')[0].value;
+  if (text === '') return;
+
+  transmitter.paste(text);
+  renderScreen(receiver.changedRows());
+  $('#myModal').modal('hide');
+}
+
+function paste() {
+  transmitter.paste(clipboard.readText());
+  renderScreen(receiver.changedRows());
+}
+
+function copy() {
+  clipboard.writeText(clipboard.readText('selection'));
+}
+
 window.onload = () => {
   var body = document.querySelector('body');
   body.addEventListener('keydown', (e) => {
-    e.preventDefault();
-
-    transmitter.typeIn(e);
+    if (!modalShown) {
+      e.preventDefault();
+      transmitter.typeIn(e);
+    }
   });
 
   screenElt = document.getElementById('screen');
   populate(screenElt, term.cols, term.rows);
   renderScreen(receiver.changedRows());
 
-  desiredWindowWidth = $('#screen #row-0').width() + 18;
-  desiredWindowHeight = $('#screen').height() + 43;
+  desiredWindowWidth = $('#screen #row-0 div').width();
+  desiredWindowHeight = $('#screen').height() + 43 - 18;
   remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, desiredWindowHeight);
-  remote.getCurrentWindow().setSize(desiredWindowWidth, desiredWindowHeight)
+  remote.getCurrentWindow().setSize(desiredWindowWidth, desiredWindowHeight);
+
+  $('#myModal').on('shown.bs.modal', function () {
+    modalShown = true;
+    $('#text').focus().val('');
+  });
+  $('#myModal').on('hidden.bs.modal', function () {
+    modalShown = false;
+  });
 };

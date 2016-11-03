@@ -686,6 +686,7 @@ Receiver.prototype.useAlternateScreenBuffer = function () {
   this.buffer = this.backBuffer;
   this.backBuffer = tmp;
   this.alternateScreen = true;
+  this.forceUpdate = true;
 };
 
 Receiver.prototype.useNormalScreenBuffer = function () {
@@ -696,6 +697,7 @@ Receiver.prototype.useNormalScreenBuffer = function () {
   this.buffer = this.backBuffer;
   this.backBuffer = tmp;
   this.alternateScreen = false;
+  this.forceUpdate = true;
 };
 
 Receiver.prototype.setScreenSize = function (columns, rows) {
@@ -1292,8 +1294,16 @@ Receiver.prototype.feed = function (data) {
   this.buffer.resetFlags();
   this.backBuffer.resetFlags();
 
+  var oldCursorY = this.cursor_y;
+  var oldCursorX = this.cursor_x;
+
   for (var char of data) {
     this.feedCharacter(char);
+  }
+
+  if (this.cursor_y !== oldCursorY || this.cursor_x !== oldCursorX) {
+    this.buffer.getLine(this.cursor_y).dirty = true;
+    this.buffer.getLine(oldCursorY).dirty = true;
   }
 };
 
