@@ -1243,6 +1243,10 @@ function isControl(c) {
   return isTrue(/^[\x00-\x1f\x7f]$/.exec(c));
 }
 
+function isTrue(value) {
+  return !!value;
+}
+
 Receiver.prototype.feedCharacter = function (character) {
   this.interpretFn = this.interpretFn(character);
   this.lastOperationWasPrint = this.printed;
