@@ -19,17 +19,11 @@ function chr(codePoint) {
 // -----------
 
 function escapeHtml(unsafe) {
-  return unsafe
-    .replace(/&/g, "&amp;")
+  return unsafe.replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function colorName(index) {
-  return ['#303030', '#be1137', '#29732c', '#c95c26', '#2a5aa2', '#cd3a93', '#078692', '#d0d0d0'][index];
-  // return ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'][index];
 }
 
 function toFraktur (char) {
@@ -60,7 +54,7 @@ function createBgStartTag(color) {
   return `<span class="background-color-${color}">`;
 }
 
-function createFgStartTag(attrs, isCursor) {
+function createFgStartTag(attrs) {
   var classes = [];
 
   if (attrs.bold)       classes.push('bold');
@@ -84,11 +78,12 @@ function createFgStartTag(attrs, isCursor) {
     classes.push(`text-color-${fg}`);
   }
 
-  if (isCursor) {
-    classes.push('cursor');
-  }
-
   return `<span class="${classes.join(' ')}">`;
+}
+
+// emojione が U+FE0E と U+FE0F を逆に解釈するので入れ替える。
+function swapVariantSelectors(str) {
+  return str.replace(/[\uFE0E\uFE0F]/, c => (c == '\uFE0E') ? '\uFE0F' : '\uFE0E');
 }
 
 function renderRow(y) {
@@ -127,43 +122,12 @@ function renderRow(y) {
                   receiver.isCursorVisible);
 
     str += createFgStartTag(cell.attrs, cursor);
-    str += emojione.unicodeToImage(escapeHtml(char));
+    if (cursor)
+      str += '<span class="cursor">';
+    str += emojione.unicodeToImage(escapeHtml(swapVariantSelectors(char)));
+    if (cursor)
+      str += '</span>';
     str += '</span>';
-
-    // var cell = receiver.buffer.getCellAt(y, x);
-    // var char = emojione.unicodeToImage(escapeHtml(cell.character));
-
-    // var fg_view = $(`#fg-${y}-${x}`);
-    // var bg_view = $(`#bg-${y}-${x}`);
-    // var classes = [];
-
-    // fg_view.removeClass();
-    // bg_view.removeClass();
-
-    // if (cell.attrs.bold)       classes.push('bold');
-    // if (cell.attrs.italic)     classes.push('italic');
-    // if (cell.attrs.blink)      fg_view.addClass('blink');
-    // if (cell.attrs.fastBlink)  fg_view.addClass('fast-blink');
-    // if (cell.attrs.fraktur)    { char = toFraktur(char); }
-    // if (cell.attrs.crossedOut) classes.push('crossed-out');
-    // if (cell.attrs.underline)  fg_view.addClass('underline');
-    // if (cell.attrs.faint)      classes.push('faint');
-    // if (cell.attrs.conceal)    classes.push('conceal');
-
-    // var fg = withDefault(cell.attrs.textColor, defaultTextColor);
-    // var bg = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
-    // if (cell.attrs.bold)
-    //   fg += 8;
-    // if (cell.attrs.reverseVideo) {
-    //   classes.push(`text-color-${bg}`);
-    //   classes.push(`background-color-${fg}`);
-    // } else {
-    //   classes.push(`text-color-${fg}`);
-    //   classes.push(`background-color-${bg}`);
-    // }
-
-    // bg_view.addClass(classes.join(' '));
-    // fg_view.html(char);
   }
   str += '</span>';
   row.html(str);
@@ -181,16 +145,16 @@ function renderScreen(changedRows) {
     renderRow(y);
   }
 
-  // $('#screen span').removeClass('cursor');
-  // if (receiver.isCursorVisible) {
-  //   $(`#fg-${receiver.cursor_y}-${receiver.cursor_x}`).addClass('cursor');
-  // }
-
   var title = document.querySelector('title');
   var altbuf = receiver.alternateScreen ? '[AltBuf]' : '';
-  title.text = `matter ${altbuf} - ${receiver.title}`;
+  var pos = `(${receiver.cursor_y}, ${receiver.cursor_x})`;
+  title.text = `matter ${altbuf} ${pos}- ${receiver.title}`;
 
-  adjustWindowSize();
+  adjustWindowHeight();
+  if (needsResize) {
+    adjustWindowWidth();
+    needsResize = false;
+  }
 }
 
 function inspect(str) {
@@ -219,9 +183,6 @@ function populate(scr, cols, rows) {
 
   for (var y = 0; y < rows; y++) {
     str += `<div id="row-${y}" style="white-space: pre"><div>`;
-    // for (var x = 0; x < cols; x++) {
-    //   str += `<span id="bg-${y}-${x}"><span id="fg-${y}-${x}"></span></span>`;
-    // }
     str += '</div></div>';
   }
   scr.innerHTML = str;
@@ -247,55 +208,43 @@ function arrayUniq(arr) {
   }
 }
 
-function stringFirst(str) {
-  if (str.length === 0) {
-    throw 'empty string';
-  } else if (/^[\uD800-\uDBFF][\uDC00-\uDFFF]/.exec(str)) {
-    return str.slice(0, 2);
-  } else {
-    return str[0];
+function setUnion(a, b) {
+  var res = new Set(a);
+  for (var elt of b) {
+    res.add(elt);
   }
-}
-
-function stringRest(str) {
-  if (str.length === 0) {
-    throw 'empty string';
-  } else if (stringFirst(str).length === 2) {
-    return str.slice(2);
-  } else {
-    return str.slice(1);
-  }
+  return res;
 }
 
 term.on('data', function(data) {
   term.pause();
-  var acc = [];
+  var acc = new Set();
   function iter(_data) {
-    if (_data === '') {
-      acc = acc.concat(receiver.changedRows());
-      renderScreen(arrayUniq(acc));
-      acc = [];
+    if (_data.length === 0) {
+      acc = setUnion(acc, new Set(receiver.changedRows()));
+      renderScreen(acc);
+      acc = new Set();
       term.resume();
     } else {
-      var char = stringFirst(_data);
-      var rest = stringRest(_data);
+      var char = _data[0];
+      var rest = _data.slice(1);
 
       receiver.feed(char);
       if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
         setTimeout(() => {
           console.log(Date.now());
-          acc = acc.concat(receiver.changedRows());
-          renderScreen(arrayUniq(acc));
-          acc = [];
+          acc = setUnion(acc, new Set(receiver.changedRows()));
+          renderScreen(acc);
+          acc = new Set();
           iter(rest);
         }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
       } else {
-        acc = acc.concat(receiver.changedRows());
+        acc = setUnion(acc, new Set(receiver.changedRows()));
         iter(rest);
       }
     }
   }
-  iter(data);
+  iter(Array.from(data));
 });
 
 term.on('close', function () {
@@ -304,11 +253,14 @@ term.on('close', function () {
 
 var screenElt;
 
+var needsResize = false;
+
 var receiver = new Receiver(term.cols, term.rows, {
   write: (data) => term.write(data),
   resize: (cols, rows) => {
     term.resize(cols, rows);
     populate(screenElt, term.cols, term.rows);
+    needsResize = true;
   },
   cursorKeyMode: (mode) => {
     transmitter.cursorKeyMode = mode;
@@ -320,18 +272,27 @@ var receiver = new Receiver(term.cols, term.rows, {
 
 var transmitter = new Transmitter(term);
 
-function adjustWindowSize() {
+function adjustWindowHeight() {
   var height = $('#screen').height() + 43 - 18;
-  var width = $('#screen #row-0 div').width();
   var browserWindow = remote.getCurrentWindow();
 
-  // console.log(height, browserWindow.getSize()[1]);
-  if (height !== browserWindow.getSize()[1] || width !== browserWindow.getSize()[0]) {
-    // remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, height);
-    remote.getCurrentWindow().setSize(width, height)
+  if (height !== browserWindow.getSize()[1]) {
+    remote.getCurrentWindow().setSize(browserWindow.getSize()[0], height)
   }
 }
 
+function adjustWindowWidth() {
+  var minWidth = 1000;
+  var browserWindow = remote.getCurrentWindow();
+
+  $('#screen #row-0 div').each(function () {
+    minWidth = Math.min($(this).width(), minWidth);
+  });
+
+  if (minWidth !== browserWindow.getSize()[0]) {
+    remote.getCurrentWindow().setSize(minWidth, browserWindow.getSize()[1]);
+  }
+}
 var desiredWindowWidth;
 var desiredWindowHeight;
 

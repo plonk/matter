@@ -72,7 +72,6 @@ Receiver.prototype.resetBuffers = function () {
   this.backBuffer = new ScreenBuffer(this.columns, this.rows);
 };
 
-
 Receiver.prototype.horizontalTabulationSet = function () {
   // console.log(`HTS ${this.cursor_x}`);
 
@@ -117,25 +116,11 @@ Receiver.prototype.previousTabStop = function () {
   }
 };
 
-Receiver.prototype.resize = function (columns, rows) {
-  throw 'not implemented';
-};
-
 Receiver.prototype.cursorOffset = function () {
   return this.cursor_y * this.columns + this.cursor_x;
 };
 
 Receiver.prototype.advanceCursor = function () {
-  // if (this.cursor_x === this.columns - 1) {
-  //   if (this.cursor_y === this.rows - 1) {
-  //     this.lineFeed();
-  //   } else {
-  //     this.cursor_y += 1;
-  //   }
-  //   this.cursor_x = 0;
-  // } else {
-  //   this.cursor_x += 1;
-  // }
   if (this.cursor_x === this.columns - 1) {
     if (this.cursor_y === this.scrollingRegionBottom) {
       this.lineFeed();
@@ -198,6 +183,13 @@ Receiver.prototype.fc_normal = function (c) {
     return this.fc_esc;
   } else if (isControl(c)) {
     this.processControlCharacter(c);
+    return this.fc_normal;
+  } else if (/^[\uFE00-\uFE0f]$/.exec(c)) { // surrogate pair
+    console.log(this.cursor_y, this.cursor_x, this.cursorOffset());
+    if (this.cursorOffset() !== 0) {
+      var cell = this.buffer.getCellAtOffset(this.cursorOffset() - 1);
+      cell.character += c;
+    }
     return this.fc_normal;
   } else {
     // 文字の追加。
@@ -264,13 +256,17 @@ Receiver.prototype.addCharacter = function (c) {
     if (this.insertMode) {
       this.insertBlankCharacters('2');
     }
+    if (this.cursor_x === this.columns - 1) {
+      if (this.autoWrap) {
+        this.advanceCursor();
+      }
+    }
     this.buffer.getCellAtOffset(this.cursorOffset()).attrs = this.graphicAttrs.clone();
     this.buffer.getCellAtOffset(this.cursorOffset()).character = c;
     this.buffer.getCellAtOffset(this.cursorOffset() + 1).attrs = this.graphicAttrs.clone();
     this.buffer.getCellAtOffset(this.cursorOffset() + 1).character = '';
     this.advanceCursor();
     this.advanceCursor();
-    this.writtenLastColumn = false; // FIXME
     break;
   default:
     console.log(`length ${c}`)
@@ -311,7 +307,6 @@ Receiver.prototype.fc_controlSequenceIntroduced = function (c) {
   }
   return parsingControlSequence.call(this, c);
 };
-
 
 Receiver.prototype.cursorPosition = function (args_str) {
   // console.log('CUP', args_str);
@@ -603,7 +598,8 @@ Receiver.prototype.scrollUp = function (y1, y2, nlines) {
 };
 
 Receiver.prototype.insertLines = function (args_str) {
-  if (this.cursor_y < this.scrollingRegionTop || this.cursor_y > this.scrollingRegionBottom) {
+  if (this.cursor_y < this.scrollingRegionTop ||
+    this.cursor_y > this.scrollingRegionBottom) {
     console.log(`IL cursor outside scrolling region`);
     return;
   }
@@ -615,8 +611,9 @@ Receiver.prototype.insertLines = function (args_str) {
 };
 
 Receiver.prototype.deleteLines = function (args_str) {
-  if (this.cursor_y < this.scrollingRegionTop || this.cursor_y > this.scrollingRegionBottom) {
-    console.log(`IL cursor outside scrolling region`);
+  if (this.cursor_y < this.scrollingRegionTop ||
+    this.cursor_y > this.scrollingRegionBottom) {
+    console.log(`DL cursor outside scrolling region`);
     return;
   }
 
@@ -1000,6 +997,7 @@ Receiver.prototype.operatingSystemCommand = function (arg_str) {
 Receiver.prototype.fc_startOperatingSystemCommand = function (c) {
   var args = '';
   function parsingOperatingSystemCommand(c) {
+    // String Terminator に対応していない。 
     if (c === '\x07') { // BEL
       this.operatingSystemCommand(args);
       return this.fc_normal;
@@ -1139,12 +1137,12 @@ Receiver.prototype.fc_designateCharacterSetG3 = function (c) {
   return this.fc_normal;
 };
 
-Receiver.prototype.fc_singelShift2 = function (c) {
+Receiver.prototype.fc_singleShift2 = function (c) {
   this.addCharacter(this.G2(c));
   return this.fc_normal;
 };
 
-Receiver.prototype.fc_singelShift3 = function (c) {
+Receiver.prototype.fc_singleShift3 = function (c) {
   this.addCharacter(this.G3(c));
   return this.fc_normal;
 };
@@ -1180,12 +1178,6 @@ Receiver.prototype.fc_esc = function (c) {
   } else if (c === 'E') {
     this.cursor_x = 0;
     this.index();
-    // this.cursor_x = 0;
-    // if (this.cursor_y === this.rows - 1) {
-    //   this.scrollUp(0, this.rows - 1, 1);
-    // } else {
-    //   this.cursor_y += 1;
-    // }
     return this.fc_normal;
   } else if (c === 'D') {
     this.index();
@@ -1237,7 +1229,7 @@ Receiver.prototype.applyCurrentCharacterSet = function (c) {
 };
 
 Receiver.prototype.cs_lineDrawing = function (c) {
-  var specialCharacters = ['◆','▒','␉','␌','␍','␊','°','±','␤','␋','┘','┐','┌','└','┼','⎺','⎻','─','⎼','⎽','├','┤','┴','┬','│','≤','≥','π','≠','£','·']
+  var specialCharacters = ['◆','▒','␉','␌','␍','␊','°','±','␤','␋','┘','┐','┌','└','┼','⎺','⎻','─','⎼','⎽','├','┤','┴','┬','│','≤','≥','π','≠','£','·'];
   var index = '`abcdefghijklmnopqrstuvwxyz{|}~'.indexOf(c);
 
   if (index === -1) {
@@ -1246,10 +1238,6 @@ Receiver.prototype.cs_lineDrawing = function (c) {
     return specialCharacters[index];
   }
 };
-
-function isTrue(val) {
-  return !!val;
-}
 
 function isControl(c) {
   return isTrue(/^[\x00-\x1f\x7f]$/.exec(c));
@@ -1260,10 +1248,6 @@ Receiver.prototype.feedCharacter = function (character) {
   this.lastOperationWasPrint = this.printed;
   this.printed = false;
 };
-
-function deepCopyBuffer(buffer) {
-  return buffer.clone();
-}
 
 Receiver.prototype.changedRows = function () {
   if (this.forceUpdate) {
@@ -1281,11 +1265,7 @@ Receiver.prototype.changedRows = function () {
 };
 
 Receiver.prototype.allRows = function () {
-  var res = [];
-  for (var i = 0; i < this.rows; i++) {
-    res.push(i);
-  }
-  return res;
+  return Array.from(Array(this.rows).keys());
 };
 
 Receiver.prototype.feed = function (data) {

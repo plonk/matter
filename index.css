@@ -22,8 +22,13 @@ span { overflow: visible }
 }
 .faint { opacity: 0.5 }
 .conceal { opacity: 0 }
-.cursor { animation: blinker 1s linear infinite }
-.cursor { background-color: magenta !important; color: white !important }
+.cursor { animation: cursor-blinker 1s ease-in-out infinite }
+
+@keyframes cursor-blinker {
+    0% { background-color: magenta; color: white }
+    50% { background-color: transparent; color: inherit }
+    100% { background-color: magenta; color: white  }
+}
 
 .row-normal { }
 .row-double-width { transform-origin: left; transform: scale(2, 1) }
@@ -108,8 +113,8 @@ span { overflow: visible }
     border-color: rgb(49,231,34);
 }
 .text-color-11 {
-    color: rgb(234,263,35);
-    border-color: rgb(234,263,35);
+    color: rgb(234,236,35);
+    border-color: rgb(234,236,35);
 }
 .text-color-12 {
     color: rgb(88,51,255);
@@ -147,7 +152,7 @@ span { overflow: visible }
 .background-color-8  { background-color: rgb(129,131,131) }
 .background-color-9  { background-color: rgb(252,57,31)   }
 .background-color-10 { background-color: rgb(49,231,34)   }
-.background-color-11 { background-color: rgb(234,263,35)  }
+.background-color-11 { background-color: rgb(234,236,35)  }
 .background-color-12 { background-color: rgb(88,51,255)   }
 .background-color-13 { background-color: rgb(249,53,248)  }
 .background-color-14 { background-color: rgb(20,240,240)  }
