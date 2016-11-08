@@ -4,27 +4,7 @@ var pty = require('pty');
 var {ipcRenderer, remote, clipboard} = require('electron')
 var {Receiver}    = require('./receiver')
 var {Transmitter} = require('./transmitter');
-var {withDefault} = require('./util');
-
-// -----------
-
-function ord(str) {
-  return str.codePointAt(0);
-}
-
-function chr(codePoint) {
-  return String.fromCodePoint(codePoint);
-}
-
-// -----------
-
-function escapeHtml(unsafe) {
-  return unsafe.replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+var {orElse, ord, chr, escapeHtml, padLeft} = require('./util');
 
 function toFraktur (char) {
   if (char.length !== 1)
@@ -66,8 +46,8 @@ function createFgStartTag(attrs) {
   if (attrs.faint)      classes.push('faint');
   if (attrs.conceal)    classes.push('conceal');
 
-  var fg = withDefault(attrs.textColor, receiver.getDefaultTextColor());
-  var bg = withDefault(attrs.backgroundColor, receiver.getDefaultBackgroundColor());
+  var fg = orElse(attrs.textColor, receiver.getDefaultTextColor());
+  var bg = orElse(attrs.backgroundColor, receiver.getDefaultBackgroundColor());
 
   if (attrs.bold)
     fg += 8;
@@ -100,9 +80,9 @@ function renderRow(y) {
 
     var newBgColor;
     if (cell.attrs.reverseVideo) {
-      newBgColor = withDefault(cell.attrs.textColor, defaultTextColor)
+      newBgColor = orElse(cell.attrs.textColor, defaultTextColor)
     } else {
-      newBgColor = withDefault(cell.attrs.backgroundColor, defaultBackgroundColor);
+      newBgColor = orElse(cell.attrs.backgroundColor, defaultBackgroundColor);
     }
 
     if (bgColor !== newBgColor) {
@@ -133,6 +113,12 @@ function renderRow(y) {
   row.html(str);
 }
 
+function formatPosition(y, x) {
+  var str_y = padLeft(String(receiver.cursor_y + 1), 2, '0');
+  var str_x = padLeft(String(receiver.cursor_x + 1), 3, '0');
+  return `(${str_y},${str_x})`;
+}
+
 function renderScreen(changedRows) {
   console.log(changedRows);
 
@@ -147,7 +133,7 @@ function renderScreen(changedRows) {
 
   var title = document.querySelector('title');
   var altbuf = receiver.alternateScreen ? '[AltBuf]' : '';
-  var pos = `(${receiver.cursor_y}, ${receiver.cursor_x})`;
+  var pos = formatPosition(receiver.cursor_y, receiver.cursor_x);
   title.text = `matter ${altbuf} ${pos}- ${receiver.title}`;
 
   adjustWindowHeight();
@@ -273,29 +259,20 @@ var receiver = new Receiver(term.cols, term.rows, {
 var transmitter = new Transmitter(term);
 
 function adjustWindowHeight() {
-  var height = $('#screen').height() + 43 - 18;
-  var browserWindow = remote.getCurrentWindow();
+  var height = $('#screen').height() + 25;
 
-  if (height !== browserWindow.getSize()[1]) {
-    remote.getCurrentWindow().setSize(browserWindow.getSize()[0], height)
-  }
+  ipcRenderer.send('adjust-window-height', height);
 }
 
 function adjustWindowWidth() {
   var minWidth = 1000;
-  var browserWindow = remote.getCurrentWindow();
 
   $('#screen #row-0 div').each(function () {
     minWidth = Math.min($(this).width(), minWidth);
   });
 
-  if (minWidth !== browserWindow.getSize()[0]) {
-    remote.getCurrentWindow().setSize(minWidth, browserWindow.getSize()[1]);
-  }
+  ipcRenderer.send('adjust-window-width', minWidth);
 }
-var desiredWindowWidth;
-var desiredWindowHeight;
-
 var modalShown = false;
 
 function showModal() {
@@ -333,8 +310,8 @@ window.onload = () => {
   populate(screenElt, term.cols, term.rows);
   renderScreen(receiver.changedRows());
 
-  desiredWindowWidth = $('#screen #row-0 div').width();
-  desiredWindowHeight = $('#screen').height() + 43 - 18;
+  var desiredWindowWidth = $('#screen #row-0 div').width();
+  var desiredWindowHeight = $('#screen').height() + 25;
   remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, desiredWindowHeight);
   remote.getCurrentWindow().setSize(desiredWindowWidth, desiredWindowHeight);
 

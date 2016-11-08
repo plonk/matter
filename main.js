@@ -1,11 +1,11 @@
 'use strict';
 
-const {app, BrowserWindow, Menu} = require('electron');
+const {app, BrowserWindow, Menu, ipcMain} = require('electron');
 
 let mainWindow;
 
 function createWindow() {
-  mainWindow = new BrowserWindow({width: 1150, height: 650});
+  mainWindow = new BrowserWindow({ width: 1150, height: 650 });
   mainWindow.loadURL(`file://${__dirname}/index.html`);
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -26,6 +26,18 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (mainWindow === null)
     createWindow();
+});
+
+ipcMain.on('adjust-window-height', (sender, height) => {
+  if (height !== mainWindow.getSize()[1]) {
+    mainWindow.setSize(mainWindow.getSize()[0], height)
+  }
+});
+
+ipcMain.on('adjust-window-width', (sender, width) => {
+  if (width !== mainWindow.getSize()[0]) {
+    mainWindow.setSize(width, mainWindow.getSize()[1]);
+  }
 });
 
 // メニュー情報の作成
@@ -74,13 +86,13 @@ const template = [
       {
         label: 'DevTools 切り替え',
         accelerator: 'F12',
-        click: function() {
+        click: function () {
           BrowserWindow.getFocusedWindow().toggleDevTools()
         }
       },
       {
         label: '画面反転',
-        click: function() {
+        click: function () {
           BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.feed("\\x1b[?5h"); renderScreen(receiver.changedRows());');
         }
       },

@@ -1,6 +1,6 @@
 'use strict';
 
-var {withDefault} = require('./util');
+var {orElse} = require('./util');
 
 // グラフィック属性。文字の修飾状態。
 function GraphicAttrs() {
@@ -47,8 +47,8 @@ function Cell(proto) {
   if (!proto)
     proto = {};
 
-  this.character = withDefault(proto.character, ' ');
-  this.broken = withDefault(proto.broken, false);
+  this.character = orElse(proto.character, ' ');
+  this.broken = orElse(proto.broken, false);
   if (proto.attrs) {
     this.attrs = proto.attrs.clone();
   } else {
