@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "CBuffer": "^2.0.0",
     "eastasianwidth": "^0.1.1",
     "pty": "0.0.0"
   }

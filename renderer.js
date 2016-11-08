@@ -28,6 +28,8 @@ function updateRowAttributes() {
     row.removeClass();
     row.addClass('row-' + receiver.buffer.getLine(y).getType());
   }
+  $(`#row-${receiver.scrollingRegionTop}`).addClass('row-scroll-region-top');
+  $(`#row-${receiver.scrollingRegionBottom}`).addClass('row-scroll-region-bottom');
 }
 
 function createBgStartTag(color) {
@@ -82,7 +84,7 @@ function renderRow(y) {
     if (cell.attrs.reverseVideo) {
       newBgColor = orElse(cell.attrs.textColor, defaultTextColor)
     } else {
-      newBgColor = orElse(cell.attrs.backgroundColor, defaultBackgroundColor);
+      newBgColor = orElse(cell.attrs.backgroundColor, 'transparent');
     }
 
     if (bgColor !== newBgColor) {
@@ -99,11 +101,16 @@ function renderRow(y) {
 
     var cursor = (y === receiver.cursor_y &&
                   x === receiver.cursor_x &&
-                  receiver.isCursorVisible);
+                  receiver.isCursorVisible &&
+                  receiver.buffer.getScrollBackOffset() === 0);
 
     str += createFgStartTag(cell.attrs, cursor);
-    if (cursor)
-      str += '<span class="cursor">';
+    if (cursor) {
+      if (receiver.reverseScreenMode)
+        str += '<span class="cursor-reverse">';
+      else
+        str += '<span class="cursor">';
+    }
     str += emojione.unicodeToImage(escapeHtml(swapVariantSelectors(char)));
     if (cursor)
       str += '</span>';
@@ -120,7 +127,12 @@ function formatPosition(y, x) {
 }
 
 function renderScreen(changedRows) {
-  console.log(changedRows);
+  $('#screen').removeClass();
+  if (receiver.reverseScreenMode) {
+    $('#screen').addClass(`background-color-7`);
+  } else {
+    $('#screen').addClass(`background-color-0`);
+  }
 
   // rowの更新。
   updateRowAttributes();
@@ -132,9 +144,10 @@ function renderScreen(changedRows) {
   }
 
   var title = document.querySelector('title');
-  var altbuf = receiver.alternateScreen ? '[AltBuf]' : '';
+  var alt = receiver.alternateScreen ? '[AltScr]' : '';
   var pos = formatPosition(receiver.cursor_y, receiver.cursor_x);
-  title.text = `matter ${altbuf} ${pos}- ${receiver.title}`;
+  var scrollBack = `${receiver.buffer.getScrollBackOffset()}/${receiver.buffer.getScrollBackBufferLength()}/${receiver.buffer.getScrollBackBufferCapacity()}`;
+  title.text = `matter ${alt} ${pos} ${scrollBack} - ${receiver.title}`;
 
   adjustWindowHeight();
   if (needsResize) {
@@ -302,7 +315,16 @@ window.onload = () => {
   body.addEventListener('keydown', (e) => {
     if (!modalShown) {
       e.preventDefault();
-      transmitter.typeIn(e);
+
+      if (e.key === 'PageUp' && e.shiftKey) {
+        receiver.scrollBack(Math.floor(receiver.rows/2));
+        renderScreen(receiver.changedRows());
+      } else if (e.key === 'PageDown' && e.shiftKey){
+        receiver.scrollBack(-Math.floor(receiver.rows/2));
+        renderScreen(receiver.changedRows());
+      } else {
+        transmitter.typeIn(e);
+      }
     }
   });
 

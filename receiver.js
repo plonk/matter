@@ -281,6 +281,12 @@ Receiver.prototype.repeatLastCharacter = function (args_str) {
     this.addCharacter(this.lastGraphicCharacter);
 };
 
+Receiver.prototype.scrollBack = function (n) {
+  var offset = this.buffer.getScrollBackOffset();
+  this.buffer.setScrollBackOffset(offset + n);
+  this.forceUpdate = true;
+};
+
 // 画面のクリア。カーソル位置はそのまま。
 Receiver.prototype.clear = function (from, to) {
   for (var i = from; i < to; i++) {
@@ -595,6 +601,7 @@ Receiver.prototype.scrollDown = function (y1, y2, nlines) {
 
 Receiver.prototype.scrollUp = function (y1, y2, nlines) {
   this.buffer.scrollUp(y1, y2, nlines);
+  this.forceUpdate = true;
 };
 
 Receiver.prototype.insertLines = function (args_str) {
@@ -1277,6 +1284,15 @@ Receiver.prototype.feed = function (data) {
   this.forceUpdate = false;
   this.buffer.resetFlags();
   this.backBuffer.resetFlags();
+
+  if (this.buffer.getScrollBackOffset() !== 0) {
+    this.buffer.setScrollBackOffset(0);
+    this.forceUpdate = true;
+  }
+  if (this.backBuffer.getScrollBackOffset() !== 0) {
+    this.backBuffer.setScrollBackOffset(0);
+    this.forceUpdate = true;
+  }
 
   var oldCursorY = this.cursor_y;
   var oldCursorX = this.cursor_x;

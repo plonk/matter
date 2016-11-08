@@ -127,15 +127,53 @@ Row.prototype.clear = function () {
   this.dirty = true;
 };
 
+var CBuffer = require('CBuffer');
+
 // スクリーンバッファー。文字セルの二次元配列のようなもの。
 function ScreenBuffer(columns, rows) {
   if (columns <= 0) throw RangeError('columns');
   if (rows <= 0) throw RangeError('rows');
   this.columns = columns;
   this.rows = rows;
-  this.buffer = createArrayThus(this.rows, () => new Row(this.columns));
+  this._buffer = this.createBuffer(2000);
   this.scrollPerformed = false; // スクロール操作が実行されたかのフラグ。
+  this._scrollBackOffset = 0;
 }
+
+ScreenBuffer.prototype.getScrollBackBufferLength = function () {
+  return this._buffer.length;
+};
+
+ScreenBuffer.prototype.getScrollBackBufferCapacity = function () {
+  return this._buffer.size;
+};
+
+ScreenBuffer.prototype.createBuffer = function (capacity) {
+  var buf = new CBuffer(capacity);
+
+  for (var i = 0; i < this.rows; i++)
+    buf.unshift(new Row(this.columns));
+
+  return buf;
+};
+
+ScreenBuffer.prototype.getScrollBackOffset = function () {
+  return this._scrollBackOffset;
+};
+
+ScreenBuffer.prototype.setScrollBackOffset = function (n) {
+  var _n;
+
+  // XXX: n の範囲チェックをしてください。
+  if (n < 0) {
+    _n = 0;
+  } else if (this._buffer.length - n < this.rows) {
+    _n = this._buffer.length - this.rows;
+  } else {
+    _n = n;
+  }
+  this._scrollBackOffset = _n;
+};
 
 ScreenBuffer.prototype.getCellAt = function (y, x) {
   if (!Number.isInteger(x)) throw TypeError('x not an integer');
@@ -143,7 +181,7 @@ ScreenBuffer.prototype.getCellAt = function (y, x) {
   if (x < 0 || x >= this.columns) throw RangeError('x');
   if (y < 0 || y >= this.rows) throw RangeError('y');
 
-  return this.buffer[y].getCellAt(x);
+  return this.getLine(y).getCellAt(x);
 };
 
 ScreenBuffer.prototype.setCellAt = function (y, x, cell) {
@@ -153,7 +191,7 @@ ScreenBuffer.prototype.setCellAt = function (y, x, cell) {
   if (y < 0 || y >= this.rows) throw RangeError('y');
   // TODO: cell の型チェック?
 
-  this.buffer[y].setCellAt(x, cell);
+  this.getLine(y).setCellAt(x, cell);
 }
 
 ScreenBuffer.prototype.getCellAtOffset = function (offset) {
@@ -162,7 +200,7 @@ ScreenBuffer.prototype.getCellAtOffset = function (offset) {
 
   var y = Math.floor(offset / this.columns);
   var x = offset % this.columns;
-  return this.buffer[y].getCellAt(x);
+  return this.getLine(y).getCellAt(x);
 };
 
 ScreenBuffer.prototype.setCellAtOffset = function (offset, cell) {
@@ -171,7 +209,7 @@ ScreenBuffer.prototype.setCellAtOffset = function (offset, cell) {
 
   var y = Math.floor(offset / this.columns);
   var x = offset % this.columns;
-  this.buffer[y].setCellAt(x, cell);
+  this.getLine(y).setCellAt(x, cell);
 };
 
 function spliceArray(ary, start, deleteCount, ary2) {
@@ -181,33 +219,56 @@ function spliceArray(ary, start, deleteCount, ary2) {
 
 // 範囲 は [y1, y2]。y2を含む。
 ScreenBuffer.prototype.scrollDown = function (y1, y2, nlines) {
-  this.buffer.copyWithin(y1 + nlines, y1, y2 - nlines + 1);
-  for (var i = y1; i < y1 + nlines; i++) {
-    this.buffer[i] = new Row(this.columns);
+  for (var i = y2 - nlines; i >= y1; i--) {
+    this.setLine(i + nlines, this.getLine(i));
+  }
+
+  for (var j = y1; j < y1 + nlines; j++) {
+    this.setLine(j, new Row(this.columns));
+  }
+
+  for (var k = y1; k <= y2; k++) {
+    this.getLine(k).dirty = true;
   }
 
   this.scrollPerformed = true;
-  for (var j = y1; j <= y2; j++) {
-    this.buffer[j].dirty = true;
-  }
 };
 
 // METHOD: scrollUp(y1, y2, nlines)
 ScreenBuffer.prototype.scrollUp = function (y1, y2, nlines) {
-  this.buffer.copyWithin(y1, y1 + nlines, y2 + 1);
-  for (var i = y2 - nlines + 1; i < y2 + 1; i++) {
-    this.buffer[i] = new Row(this.columns);
+  if (y1 === 0 && y2 === this.rows - 1) {
+    this.softScrollUp(nlines);
+    return;
+  }
+
+  for (var i = y1 + nlines; i <= y2; i++) {
+    this.setLine(i - nlines, this.getLine(i));
+  }
+
+  for (var j = y2 - nlines + 1; j < y2 + 1; j++) {
+    this.setLine(j, new Row(this.columns));
+  }
+
+  for (var k = y1; k <= y2; k++) {
+    this.getLine(k).dirty = true;
   }
 
   this.scrollPerformed = true;
-  for (var j = y1; j <= y2; j++) {
-    this.buffer[j].dirty = true;
-  }
 };
+
+ScreenBuffer.prototype.softScrollUp = function (nlines) {
+  for (var i = 0; i < nlines; i++) {
+    this._buffer.unshift(new Row(this.columns));
+  }
+}
 
 ScreenBuffer.prototype.getLine = function (index) {
   // TODO: 引数チェック
-  return this.buffer[index];
+  return this._buffer.get(this._scrollBackOffset + this.rows - index - 1);
+}
+
+ScreenBuffer.prototype.setLine = function (index, line) {
+  this._buffer.set(this._scrollBackOffset + this.rows - index - 1, line);
 }
 
 ScreenBuffer.prototype.clone = function () {
@@ -225,7 +286,7 @@ ScreenBuffer.prototype.clone = function () {
 ScreenBuffer.prototype.clearToEnd = function (y, x) {
   if (x !== 0) {
     for (var i = x; i < this.columns; i++) {
-      this.buffer[y].setCellAt(i, new Cell());
+      this.getLine(y).setCellAt(i, new Cell());
     }
     if (y === this.rows - 1)
       return;
@@ -233,14 +294,14 @@ ScreenBuffer.prototype.clearToEnd = function (y, x) {
   }
 
   for (var j = y; j < this.rows; j++) {
-    this.buffer[j].clear();
+    this.getLine(j).clear();
   }
 };
 
 ScreenBuffer.prototype.clearFromBeginning = function (y, x) {
   if (x !== this.columns - 1) {
     for (var i = 0; i <= x; i++) {
-      this.buffer[y].setCellAt(i, new Cell());
+      this.getLine(y).setCellAt(i, new Cell());
     }
     if (y === 0)
       return;
@@ -248,20 +309,20 @@ ScreenBuffer.prototype.clearFromBeginning = function (y, x) {
   }
 
   for (var j = 0; j <= y; j++) {
-    this.buffer[j].clear();
+    this.getLine(j).clear();
   }
 };
 
 ScreenBuffer.prototype.clearAll = function () {
   for (var i = 0; i < this.rows; i++) {
-    this.buffer[i].clear();
+    this.getLine(i).clear();
   }
 };
 
 ScreenBuffer.prototype.resetFlags = function () {
   this.scrollPerformed = false;
   for (var i = 0; i < this.rows; i++) {
-    this.buffer[i].dirty = false;
+    this.getLine(i).dirty = false;
   }
 };
 

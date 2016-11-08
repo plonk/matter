@@ -1,6 +1,5 @@
-body { background-color: rgb(39, 39, 39); overflow-x: hidden }
+body { background-color: rgb(0,0,0); overflow-x: hidden }
 #screen {
-    background-color: rgb(39, 39, 39);
     font-family: Ubuntu Mono;
     font-size: 20px;
     width: 100%;
@@ -23,12 +22,22 @@ span { overflow: visible }
 .faint { opacity: 0.5 }
 .conceal { opacity: 0 }
 .cursor { animation: cursor-blinker 1s ease-in-out infinite }
+.cursor-reverse { animation: cursor-blinker-reverse 1s ease-in-out infinite }
 
 @keyframes cursor-blinker {
     0% { background-color: rgb(203,204,205); color: rgb(0,0,0) }
     50% { background-color: transparent; color: inherit }
     100% { background-color: rgb(203,204,205); color: rgb(0,0,0)  }
 }
+
+@keyframes cursor-blinker-reverse {
+    0% { background-color: rgb(0,0,0); color: rgb(203,204,205) }
+    50% { background-color: transparent; color: inherit }
+    100% { background-color: rgb(0,0,0); color: rgb(203,204,205) }
+}
+
+.row-scroll-region-top    { box-shadow: inset 0px  4px 5px 0px rgba(255,255,255,0.3) }
+.row-scroll-region-bottom { box-shadow: inset 0px -4px 5px 0px rgba(255,255,255,0.3) }
 
 .row-normal { }
 .row-double-width { transform-origin: left; transform: scale(2, 1) }
@@ -141,6 +150,8 @@ span { overflow: visible }
     color: rgb(233,235,235);
     border-color: rgb(233,235,235);
 }
+.background-color-transparent  { background-color: transparent }
+
 .background-color-0  { background-color: rgb(0,0,0)       }
 .background-color-1  { background-color: rgb(194,54,33)   }
 .background-color-2  { background-color: rgb(37,188,36)   }
