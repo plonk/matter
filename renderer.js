@@ -4,7 +4,7 @@ var pty = require('pty');
 var {ipcRenderer, remote, clipboard} = require('electron')
 var {Receiver}    = require('./receiver')
 var {Transmitter} = require('./transmitter');
-var {orElse, ord, chr, escapeHtml, padLeft} = require('./util');
+var {orElse, ord, chr, escapeHtml, padLeft, setUnion} = require('./util');
 
 function toFraktur (char) {
   if (char.length !== 1)
@@ -22,31 +22,21 @@ function toFraktur (char) {
   }
 }
 
-function updateRowAttributes() {
-  for (var y = 0; y < receiver.rows; y++) {
-    var row = $(`#row-${y}`);
-    row.removeClass();
-    row.addClass('row-' + receiver.buffer.getLine(y).getType());
-  }
-  $(`#row-${receiver.scrollingRegionTop}`).addClass('row-scroll-region-top');
-  $(`#row-${receiver.scrollingRegionBottom}`).addClass('row-scroll-region-bottom');
-}
-
 function createBgStartTag(color) {
   return `<span class="background-color-${color}">`;
 }
 
 function createFgStartTag(attrs) {
-  var classes = [];
+  var classes = '';
 
-  if (attrs.bold)       classes.push('bold');
-  if (attrs.italic)     classes.push('italic');
-  if (attrs.blink)      classes.push('blink');
-  if (attrs.fastBlink)  classes.push('fast-blink');
-  if (attrs.crossedOut) classes.push('crossed-out');
-  if (attrs.underline)  classes.push('underline');
-  if (attrs.faint)      classes.push('faint');
-  if (attrs.conceal)    classes.push('conceal');
+  if (attrs.bold)       classes += ' bold';
+  if (attrs.italic)     classes += ' italic';
+  if (attrs.blink)      classes += ' blink';
+  if (attrs.fastBlink)  classes += ' fast-blink';
+  if (attrs.crossedOut) classes += ' crossed-out';
+  if (attrs.underline)  classes += ' underline';
+  if (attrs.faint)      classes += ' faint';
+  if (attrs.conceal)    classes += ' conceal';
 
   var fg = orElse(attrs.textColor, receiver.getDefaultTextColor());
   var bg = orElse(attrs.backgroundColor, receiver.getDefaultBackgroundColor());
@@ -55,12 +45,12 @@ function createFgStartTag(attrs) {
     fg += 8;
 
   if (attrs.reverseVideo) {
-    classes.push(`text-color-${bg}`);
+    classes += ` text-color-${bg}`;
   } else {
-    classes.push(`text-color-${fg}`);
+    classes += ` text-color-${fg}`;
   }
 
-  return `<span class="${classes.join(' ')}">`;
+  return `<span class="${classes}">`;
 }
 
 // emojione が U+FE0E と U+FE0F を逆に解釈するので入れ替える。
@@ -68,11 +58,16 @@ function swapVariantSelectors(str) {
   return str.replace(/[\uFE0E\uFE0F]/, c => (c == '\uFE0E') ? '\uFE0F' : '\uFE0E');
 }
 
-function renderRow(y) {
-  var defaultTextColor       = receiver.getDefaultTextColor();
-  var defaultBackgroundColor = receiver.getDefaultBackgroundColor();
+function cursorClass(receiver) {
+  var klass = 'cursor';
+  if (receiver.reverseScreenMode)
+    klass += '-reverse';
+  if (receiver.cursorBlink)
+    klass += '-blink';
+  return klass;
+}
 
-  var row = $(`#row-${y} > div`);
+function buildRowHtml(y) {
   var str = '';
   var bgColor = null;
 
@@ -82,7 +77,7 @@ function renderRow(y) {
 
     var newBgColor;
     if (cell.attrs.reverseVideo) {
-      newBgColor = orElse(cell.attrs.textColor, defaultTextColor)
+      newBgColor = orElse(cell.attrs.textColor, receiver.getDefaultTextColor())
     } else {
       newBgColor = orElse(cell.attrs.backgroundColor, 'transparent');
     }
@@ -106,10 +101,8 @@ function renderRow(y) {
 
     str += createFgStartTag(cell.attrs, cursor);
     if (cursor) {
-      if (receiver.reverseScreenMode)
-        str += '<span class="cursor-reverse">';
-      else
-        str += '<span class="cursor">';
+      var klass = cursorClass(receiver);
+      str += `<span class="${klass}">`;
     }
     str += emojione.unicodeToImage(escapeHtml(swapVariantSelectors(char)));
     if (cursor)
@@ -117,7 +110,13 @@ function renderRow(y) {
     str += '</span>';
   }
   str += '</span>';
-  row.html(str);
+  return str;
+}
+
+function renderRow(y) {
+  var row = $(`#row-${y} > div`);
+
+  row.html(buildRowHtml(y));
 }
 
 function formatPosition(y, x) {
@@ -126,7 +125,15 @@ function formatPosition(y, x) {
   return `(${str_y},${str_x})`;
 }
 
-function renderScreen(changedRows) {
+function setWindowTitle() {
+  var title = document.querySelector('title');
+  var alt = receiver.alternateScreen ? '[AltScr]' : '';
+  var pos = formatPosition(receiver.cursor_y, receiver.cursor_x);
+  var scrollBack = `${receiver.buffer.getScrollBackOffset()}/${receiver.buffer.getScrollBackBufferLength()}/${receiver.buffer.getScrollBackBufferCapacity()}`;
+  title.text = `matter ${alt} ${pos} ${scrollBack} - ${receiver.title}`;
+}
+
+function renderScreen() {
   $('#screen').removeClass();
   if (receiver.reverseScreenMode) {
     $('#screen').addClass(`background-color-7`);
@@ -134,20 +141,9 @@ function renderScreen(changedRows) {
     $('#screen').addClass(`background-color-0`);
   }
 
-  // rowの更新。
-  updateRowAttributes();
+  $('#screen').html(buildScreenHtml());
 
-  // cellの更新。
-
-  for (var y of changedRows) {
-    renderRow(y);
-  }
-
-  var title = document.querySelector('title');
-  var alt = receiver.alternateScreen ? '[AltScr]' : '';
-  var pos = formatPosition(receiver.cursor_y, receiver.cursor_x);
-  var scrollBack = `${receiver.buffer.getScrollBackOffset()}/${receiver.buffer.getScrollBackBufferLength()}/${receiver.buffer.getScrollBackBufferCapacity()}`;
-  title.text = `matter ${alt} ${pos} ${scrollBack} - ${receiver.title}`;
+  setWindowTitle();
 
   adjustWindowHeight();
   if (needsResize) {
@@ -156,35 +152,25 @@ function renderScreen(changedRows) {
   }
 }
 
-function inspect(str) {
-  var out = '';
-
-  for (var c of str) {
-    var num = ord(c);
-    if (num < 0x20) {
-      // 制御文字
-      out += '^' + chr(num + 0x40);
-    } else if (num <= 0x7e) {
-      out += c;
-    } else if (num === 0x7f) {
-      out += '^?'
-    } else {
-      // ASCIIの範囲外
-      out += c;
-    }
-  }
-
-  return out;
+function buildRowClasses(y) {
+  var str = 'row-' + receiver.buffer.getLine(y).getType();
+  if (y === receiver.scrollingRegionTop)
+    str += ' row-scroll-region-top';
+  if (y === receiver.scrollingRegionBottom)
+    str += ' row-scroll-region-bottom';
+  return str;
 }
 
-function populate(scr, cols, rows) {
+function buildScreenHtml() {
   var str = '';
 
-  for (var y = 0; y < rows; y++) {
-    str += `<div id="row-${y}" style="white-space: pre"><div>`;
+  for (var y = 0; y < receiver.rows; y++) {
+    str += `<div id="row-${y}" class="${buildRowClasses(y)}" style="white-space: pre"><div>`;
+    str += buildRowHtml(y);
     str += '</div></div>';
   }
-  scr.innerHTML = str;
+
+  return str;
 }
 
 var term = pty.spawn('bash', [], {
@@ -195,62 +181,38 @@ var term = pty.spawn('bash', [], {
   env: process.env
 });
 
-function arrayUniq(arr) {
-  if (arr.length === 0) {
-    return arr;
-  } else {
-    var first = arr[0];
-
-    return [first].concat(
-      arrayUniq(arr.slice(1).filter(elt => elt !== first))
-    );
-  }
-}
-
-function setUnion(a, b) {
-  var res = new Set(a);
-  for (var elt of b) {
-    res.add(elt);
-  }
-  return res;
-}
-
 term.on('data', function(data) {
+  var _data = Array.from(data);
   term.pause();
-  var acc = new Set();
-  function iter(_data) {
-    if (_data.length === 0) {
-      acc = setUnion(acc, new Set(receiver.changedRows()));
-      renderScreen(acc);
-      acc = new Set();
-      term.resume();
-    } else {
-      var char = _data[0];
-      var rest = _data.slice(1);
-
-      receiver.feed(char);
-      if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
-        setTimeout(() => {
-          console.log(Date.now());
-          acc = setUnion(acc, new Set(receiver.changedRows()));
-          renderScreen(acc);
-          acc = new Set();
-          iter(rest);
-        }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
+  function iter(index) {
+    while (true) {
+      if (index === _data.length) {
+        renderScreen();
+        term.resume();
+        return;
       } else {
-        acc = setUnion(acc, new Set(receiver.changedRows()));
-        iter(rest);
+        var char = _data[index];
+
+        receiver.feed(char);
+        if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
+          setTimeout(() => {
+            console.log(Date.now());
+            renderScreen();
+            iter(index + 1);
+          }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
+          return;
+        } else {
+          index += 1;
+        }
       }
     }
   }
-  iter(Array.from(data));
+  iter(0);
 });
 
 term.on('close', function () {
   window.close();
 });
-
-var screenElt;
 
 var needsResize = false;
 
@@ -258,7 +220,6 @@ var receiver = new Receiver(term.cols, term.rows, {
   write: (data) => term.write(data),
   resize: (cols, rows) => {
     term.resize(cols, rows);
-    populate(screenElt, term.cols, term.rows);
     needsResize = true;
   },
   cursorKeyMode: (mode) => {
@@ -297,13 +258,13 @@ function enterText() {
   if (text === '') return;
 
   transmitter.paste(text);
-  renderScreen(receiver.changedRows());
+  renderScreen();
   $('#myModal').modal('hide');
 }
 
 function paste() {
   transmitter.paste(clipboard.readText());
-  renderScreen(receiver.changedRows());
+  renderScreen();
 }
 
 function copy() {
@@ -317,20 +278,20 @@ window.onload = () => {
       e.preventDefault();
 
       if (e.key === 'PageUp' && e.shiftKey) {
-        receiver.scrollBack(Math.floor(receiver.rows/2));
-        renderScreen(receiver.changedRows());
+        receiver.scrollBack(1);
+        // receiver.scrollBack(Math.floor(receiver.rows/2));
+        renderScreen();
       } else if (e.key === 'PageDown' && e.shiftKey){
-        receiver.scrollBack(-Math.floor(receiver.rows/2));
-        renderScreen(receiver.changedRows());
+        receiver.scrollBack(-1);
+        // receiver.scrollBack(-Math.floor(receiver.rows/2));
+        renderScreen();
       } else {
         transmitter.typeIn(e);
       }
     }
   });
 
-  screenElt = document.getElementById('screen');
-  populate(screenElt, term.cols, term.rows);
-  renderScreen(receiver.changedRows());
+  renderScreen();
 
   var desiredWindowWidth = $('#screen #row-0 div').width();
   var desiredWindowHeight = $('#screen').height() + 25;

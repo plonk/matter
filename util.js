@@ -41,6 +41,47 @@ function padLeft(string, length, character) {
   return Array(shortage + 1).join(character) + string; 
 }
 
+function inspect(str) {
+  var out = '';
+
+  for (var c of str) {
+    var num = ord(c);
+    if (num < 0x20) {
+      // 制御文字
+      out += '^' + chr(num + 0x40);
+    } else if (num <= 0x7e) {
+      out += c;
+    } else if (num === 0x7f) {
+      out += '^?'
+    } else {
+      // ASCIIの範囲外
+      out += c;
+    }
+  }
+
+  return out;
+}
+
+function arrayUniq(arr) {
+  if (arr.length === 0) {
+    return arr;
+  } else {
+    var first = arr[0];
+
+    return [first].concat(
+      arrayUniq(arr.slice(1).filter(elt => elt !== first))
+    );
+  }
+}
+
+function setUnion(a, b) {
+  var res = new Set(a);
+  for (var elt of b) {
+    res.add(elt);
+  }
+  return res;
+}
+
 module.exports = {
   orElse: orElse,
   orElseGet: orElseGet,
@@ -48,5 +89,8 @@ module.exports = {
   chr: chr,
   escapeHtml: escapeHtml,
   padLeft: padLeft,
+  inspect: inspect,
+  arrayUniq: arrayUniq,
+  setUnion: setUnion,
 };
 

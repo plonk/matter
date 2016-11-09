@@ -83,7 +83,6 @@ function Row(length) {
   this.length = length;
   this._type = 'normal';
   this.array = createArrayThus(length, () => new Cell());
-  this.dirty = true;
 }
 
 const ROW_TYPES = ['normal', 'double-width', 'top-half', 'bottom-half'];
@@ -92,7 +91,6 @@ Row.prototype.setType = function (type) {
   if (!ROW_TYPES.includes(type)) throw RangeError('normal, double-width, top-half, bottom-half');
 
   this._type = type;
-  this.dirty = true;
 };
 
 Row.prototype.getType = function () {
@@ -109,14 +107,12 @@ Row.prototype.checkInRange = function (index) {
 
 Row.prototype.getCellAt = function (index) {
   this.checkInRange(index);
-  this.dirty = true;
 
   return this.array[index];
 };
 
 Row.prototype.setCellAt = function (index, cell) {
   this.checkInRange(index);
-  this.dirty = true;
 
   this.array[index] = cell;
 };
@@ -124,7 +120,6 @@ Row.prototype.setCellAt = function (index, cell) {
 Row.prototype.clear = function () {
   this.array = createArrayThus(this.length, () => new Cell());
   this.setType('normal');
-  this.dirty = true;
 };
 
 var CBuffer = require('CBuffer');
@@ -227,10 +222,6 @@ ScreenBuffer.prototype.scrollDown = function (y1, y2, nlines) {
     this.setLine(j, new Row(this.columns));
   }
 
-  for (var k = y1; k <= y2; k++) {
-    this.getLine(k).dirty = true;
-  }
-
   this.scrollPerformed = true;
 };
 
@@ -247,10 +238,6 @@ ScreenBuffer.prototype.scrollUp = function (y1, y2, nlines) {
 
   for (var j = y2 - nlines + 1; j < y2 + 1; j++) {
     this.setLine(j, new Row(this.columns));
-  }
-
-  for (var k = y1; k <= y2; k++) {
-    this.getLine(k).dirty = true;
   }
 
   this.scrollPerformed = true;
@@ -321,9 +308,6 @@ ScreenBuffer.prototype.clearAll = function () {
 
 ScreenBuffer.prototype.resetFlags = function () {
   this.scrollPerformed = false;
-  for (var i = 0; i < this.rows; i++) {
-    this.getLine(i).dirty = false;
-  }
 };
 
 module.exports = {

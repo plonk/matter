@@ -46,7 +46,6 @@ Receiver.prototype.fullReset = function () {
   this.scrollingRegionTop = 0;
   this.scrollingRegionBottom = this.rows - 1;
   this.originModeRelative = false;
-  this.forceUpdate = true;
   this.autoWrap = true;
   this.lastWrittenColumn = -1;
   this.lastWrittenRow = -1;
@@ -284,7 +283,6 @@ Receiver.prototype.repeatLastCharacter = function (args_str) {
 Receiver.prototype.scrollBack = function (n) {
   var offset = this.buffer.getScrollBackOffset();
   this.buffer.setScrollBackOffset(offset + n);
-  this.forceUpdate = true;
 };
 
 // 画面のクリア。カーソル位置はそのまま。
@@ -601,7 +599,6 @@ Receiver.prototype.scrollDown = function (y1, y2, nlines) {
 
 Receiver.prototype.scrollUp = function (y1, y2, nlines) {
   this.buffer.scrollUp(y1, y2, nlines);
-  this.forceUpdate = true;
 };
 
 Receiver.prototype.insertLines = function (args_str) {
@@ -690,7 +687,6 @@ Receiver.prototype.useAlternateScreenBuffer = function () {
   this.buffer = this.backBuffer;
   this.backBuffer = tmp;
   this.alternateScreen = true;
-  this.forceUpdate = true;
 };
 
 Receiver.prototype.useNormalScreenBuffer = function () {
@@ -701,7 +697,6 @@ Receiver.prototype.useNormalScreenBuffer = function () {
   this.buffer = this.backBuffer;
   this.backBuffer = tmp;
   this.alternateScreen = false;
-  this.forceUpdate = true;
 };
 
 Receiver.prototype.setScreenSize = function (columns, rows) {
@@ -730,7 +725,6 @@ Receiver.prototype.doPrivateModeSet = function (num) {
     break;
   case 5:
     this.reverseScreenMode = true;
-    this.forceUpdate = true;
     console.log('reverse screen mode');
     break;
   case 6:
@@ -741,7 +735,10 @@ Receiver.prototype.doPrivateModeSet = function (num) {
     this.autoWrap = true;
     break;
   case 12:
-    console.log('start blinking cursor');
+    // xtermのドキュメントはsetで点滅とあるが、実際の実装は逆なのでそ
+    // れに従う。
+    console.log('stop blinking cursor');
+    this.cursorBlink = false;
     break;
   case 25:
     this.isCursorVisible = true;
@@ -790,7 +787,6 @@ Receiver.prototype.doPrivateModeReset = function (num) {
     break;
   case 5:
     this.reverseScreenMode = false;
-    this.forceUpdate = true;
     console.log('normal screen mode');
     break;
   case 6:
@@ -800,7 +796,10 @@ Receiver.prototype.doPrivateModeReset = function (num) {
     this.autoWrap = false;
     break;
   case 12:
+    // xtermのドキュメントはresetで点滅停止とあるが、実際の実装は逆な
+    // のでそれに従う。
     console.log('stop blinking cursor');
+    this.cursorBlink = true;
     break;
   case 25:
     this.isCursorVisible = false;
@@ -1260,38 +1259,16 @@ Receiver.prototype.feedCharacter = function (character) {
   this.printed = false;
 };
 
-Receiver.prototype.changedRows = function () {
-  if (this.forceUpdate) {
-    return this.allRows();
-  } else {
-    var res = [];
-    for (var i = 0; i < this.rows; i++) {
-      var line = this.buffer.getLine(i);
-      if (line.dirty) {
-        res.push(i);
-      }
-    }
-    return res;
-  }
-};
-
-Receiver.prototype.allRows = function () {
-  return Array.from(Array(this.rows).keys());
-};
-
 Receiver.prototype.feed = function (data) {
   // フラグのリセット
-  this.forceUpdate = false;
   this.buffer.resetFlags();
   this.backBuffer.resetFlags();
 
   if (this.buffer.getScrollBackOffset() !== 0) {
     this.buffer.setScrollBackOffset(0);
-    this.forceUpdate = true;
   }
   if (this.backBuffer.getScrollBackOffset() !== 0) {
     this.backBuffer.setScrollBackOffset(0);
-    this.forceUpdate = true;
   }
 
   var oldCursorY = this.cursor_y;
@@ -1299,11 +1276,6 @@ Receiver.prototype.feed = function (data) {
 
   for (var char of data) {
     this.feedCharacter(char);
-  }
-
-  if (this.cursor_y !== oldCursorY || this.cursor_x !== oldCursorX) {
-    this.buffer.getLine(this.cursor_y).dirty = true;
-    this.buffer.getLine(oldCursorY).dirty = true;
   }
 };
 
