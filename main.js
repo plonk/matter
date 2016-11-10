@@ -11,6 +11,7 @@ function createWindow() {
     mainWindow = null;
   });
 }
+console.log(process.argv);
 
 app.on('ready', () => {
   Menu.setApplicationMenu(menu);
@@ -69,13 +70,11 @@ const template = [
           BrowserWindow.getFocusedWindow().webContents.executeJavaScript('paste();')
         }
       },
-      {
-        type: 'separator'
-      },
+      { type: 'separator' },
       {
         label: 'テキスト入力',
         click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('showModal();');
+          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('showInputModal();');
         }
       },
     ]
@@ -90,10 +89,34 @@ const template = [
           BrowserWindow.getFocusedWindow().toggleDevTools()
         }
       },
+      { type: 'separator' },
       {
         label: '画面反転',
         click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.feed("\\x1b[?5h"); renderScreen(receiver.changedRows());');
+          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.reverseScreenMode = !receiver.reverseScreenMode; renderScreen();');
+        }
+      },
+      {
+        label: '80x24',
+        click: function () {
+          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.setScreenSize(80,24); renderScreen();');
+        }
+      },
+      {
+        label: '132x24',
+        click: function () {
+          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.setScreenSize(132,24); renderScreen();');
+        }
+      },
+    ]
+  },
+  {
+    label: 'ヘルプ',
+    submenu: [
+      {
+        label: 'バージョン情報',
+        click: function () {
+          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('showAboutModal();');
         }
       },
     ]

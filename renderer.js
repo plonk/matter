@@ -249,8 +249,12 @@ function adjustWindowWidth() {
 }
 var modalShown = false;
 
-function showModal() {
-  $('#myModal').modal('show');
+function showInputModal() {
+  $('#inputModal').modal('show');
+}
+
+function showAboutModal() {
+  $('#aboutModal').modal('show');
 }
 
 function enterText() {
@@ -298,11 +302,23 @@ window.onload = () => {
   remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, desiredWindowHeight);
   remote.getCurrentWindow().setSize(desiredWindowWidth, desiredWindowHeight);
 
-  $('#myModal').on('shown.bs.modal', function () {
+  $('#inputModal').on('shown.bs.modal', function () {
     modalShown = true;
     $('#text').focus().val('');
   });
-  $('#myModal').on('hidden.bs.modal', function () {
+
+  $('#inputModal').on('hidden.bs.modal', function () {
     modalShown = false;
   });
+
+  $('#aboutModal').on('shown.bs.modal', function () {
+    modalShown = true;
+  });
+
+  $('#aboutModal').on('hidden.bs.modal', function () {
+    modalShown = false;
+  });
+
+  $('#version').html('0.0.2');
 };
+console.log(process.argv);
