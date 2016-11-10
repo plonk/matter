@@ -173,7 +173,9 @@ function buildScreenHtml() {
   return str;
 }
 
-var term = pty.spawn('bash', [], {
+var commandLine = remote.getCurrentWindow().commandLine;
+
+var term = pty.spawn(commandLine[0], commandLine.slice(1), {
   name: 'xterm',
   cols: 80,
   rows: 24,
@@ -321,4 +323,3 @@ window.onload = () => {
 
   $('#version').html('0.0.2');
 };
-console.log(process.argv);

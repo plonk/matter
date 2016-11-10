@@ -1,21 +1,62 @@
 'use strict';
 
 const {app, BrowserWindow, Menu, ipcMain} = require('electron');
+const {version} = require('./version');
 
 let mainWindow;
 
-function createWindow() {
+function createWindow(commandLine) {
   mainWindow = new BrowserWindow({ width: 1150, height: 650 });
   mainWindow.loadURL(`file://${__dirname}/index.html`);
+  mainWindow.commandLine = commandLine;
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
-console.log(process.argv);
+
+function printVersion() {
+  process.stdout.write('matter ' + version + '\n');
+}
+
+function printUsage() {
+  process.stdout.write('matter [OPTIONS] [-e COMMAND ARGS...] [COMMAND]\n');
+  process.stdout.write('\t-version\n');
+  process.stdout.write('\t-help\n');
+  process.stdout.write('\t-e COMMAND ARGS\n');
+}
+
+var options = {};
+
+function processCommandLineArguments() {
+  var argv = process.argv.slice(2);
+
+  for (var i = 0; i < argv.length; i++) {
+    if (argv[i] === '-version') {
+      printVersion();
+      process.exit(0);
+    } else if (argv[i] === '-help') {
+      printUsage();
+      process.exit(0);
+    } else if (argv[i] === '-e') {
+      options['command'] = argv.slice(i + 1);
+      break;
+    } else {
+      options['command'] = [argv[i]];
+      break;
+    }
+  }
+
+  if (!options['command']) {
+    var shell = process.env['SHELL'] || '/bin/sh'
+    options['command'] = [shell];
+  }
+}
+
+processCommandLineArguments();
 
 app.on('ready', () => {
   Menu.setApplicationMenu(menu);
-  createWindow();
+  createWindow(options['command']);
   // mainWindow.webContents.openDevTools()
 });
 
@@ -26,7 +67,7 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (mainWindow === null)
-    createWindow();
+    createWindow(options['command']);
 });
 
 ipcMain.on('adjust-window-height', (sender, height) => {
