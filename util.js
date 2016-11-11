@@ -82,6 +82,27 @@ function setUnion(a, b) {
   return res;
 }
 
+function assertEquals(expected, value) {
+  if (value === expected) {
+    console.log('OK');
+  } else {
+    console.log('FAIL');
+  }
+}
+
+function assertThrows(expectedError, fn) {
+  try {
+    fn();
+    console.log('FAIL (didn\'t throw)');
+  } catch (err) {
+    if (err instanceof expectedError) {
+      console.log('OK');
+    } else {
+      console.log(`FAIL (${err.name} while ${expectedError.name} is expected)`);
+    }
+  }
+}
+
 module.exports = {
   orElse: orElse,
   orElseGet: orElseGet,
@@ -92,5 +113,7 @@ module.exports = {
   inspect: inspect,
   arrayUniq: arrayUniq,
   setUnion: setUnion,
+  assertEquals: assertEquals,
+  assertThrows: assertThrows,
 };
 

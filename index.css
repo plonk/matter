@@ -1,13 +1,24 @@
-body { background-color: rgb(0,0,0); overflow-x: hidden }
-#screen {
+body {
+    overflow-x: hidden;
+    overflow-y: hidden;
+}
+#screen_outer {
     font-family: Ubuntu Mono;
-    font-size: 20px;
-    width: 100%;
-    margin-right: auto;
+    font-size: 16px;
+    padding-bottom: 20px;
+    padding-top: 20px;
+}
+#screen {
+    margin-right: 20px;
+    margin-left: 20px;
+}
+.emojione {
+    min-height: 0;
+    min-width: 0;
 }
 #screen div div { display: inline-block; }
-div { line-height: 26px }
-div > span { padding-top: 3px; padding-bottom: 3px; }
+div { line-height: 1.19em }
+div > span { padding-top: 1px; padding-bottom: 1px; }
 span { overflow: visible }
 
 .blink { animation: blinker 1s linear infinite }

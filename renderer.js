@@ -129,25 +129,26 @@ function setWindowTitle() {
   var title = document.querySelector('title');
   var alt = receiver.alternateScreen ? '[AltScr]' : '';
   var pos = formatPosition(receiver.cursor_y, receiver.cursor_x);
-  var scrollBack = `${receiver.buffer.getScrollBackOffset()}/${receiver.buffer.getScrollBackBufferLength()}/${receiver.buffer.getScrollBackBufferCapacity()}`;
+  var scrollBack = `${-receiver.buffer.getScrollBackOffset()}`;
   title.text = `matter ${alt} ${pos} ${scrollBack} - ${receiver.title}`;
 }
 
 function renderScreen() {
-  $('#screen').removeClass();
+  $('#screen_outer').removeClass();
   if (receiver.reverseScreenMode) {
-    $('#screen').addClass(`background-color-7`);
+    $('#screen_outer').addClass(`background-color-7`);
   } else {
-    $('#screen').addClass(`background-color-0`);
+    $('#screen_outer').addClass(`background-color-0`);
   }
 
   $('#screen').html(buildScreenHtml());
 
   setWindowTitle();
 
-  adjustWindowHeight();
+  // adjustWindowHeight();
   if (needsResize) {
-    adjustWindowWidth();
+    fitWindow();
+    // adjustWindowWidth();
     needsResize = false;
   }
 }
@@ -217,6 +218,7 @@ term.on('close', function () {
 });
 
 var needsResize = false;
+var beepAudio = new Audio('beep.wav');
 
 var receiver = new Receiver(term.cols, term.rows, {
   write: (data) => term.write(data),
@@ -228,7 +230,7 @@ var receiver = new Receiver(term.cols, term.rows, {
     transmitter.cursorKeyMode = mode;
   },
   beep: () => {
-    new Audio('beep.wav').play();
+    beepAudio.play();
   }
 });
 
@@ -277,6 +279,35 @@ function copy() {
   clipboard.writeText(clipboard.readText('selection'));
 }
 
+function changeFontSize(pixels) {
+  $('#screen').css('font-size', `${pixels}px`);
+  fitWindow();
+}
+
+function fitWindow() {
+  $('#screen').css('width', `${receiver.columns}ch`);
+
+  var width = $('#screen').outerWidth(true);
+  var height = $('#screen').outerHeight(true) + 40 + 25;
+
+  remote.getCurrentWindow().setSize(Math.floor(width), Math.floor(height));
+}
+
+function fitScreen() {
+  var [windowWidth, windowHeight] = remote.getCurrentWindow().getSize();
+
+  // var screenWidth = width - 40;
+  var charWidth = $('#screen').width() / receiver.columns;
+  var nColumns = Math.round((windowWidth - 40) / charWidth);
+
+  var lineHeight = parseFloat($('#screen').css('line-height').replace(/px/, ''));
+  console.log(lineHeight);
+  var nRows = Math.round((windowHeight - 65) / lineHeight);
+
+  receiver.setScreenSize(nColumns, nRows);
+  renderScreen();
+}
+
 window.onload = () => {
   var body = document.querySelector('body');
   body.addEventListener('keydown', (e) => {
@@ -284,12 +315,14 @@ window.onload = () => {
       e.preventDefault();
 
       if (e.key === 'PageUp' && e.shiftKey) {
-        receiver.scrollBack(1);
+        // receiver.scrollBack(1);
         // receiver.scrollBack(Math.floor(receiver.rows/2));
+        receiver.scrollBack(receiver.rows);
         renderScreen();
       } else if (e.key === 'PageDown' && e.shiftKey){
-        receiver.scrollBack(-1);
+        // receiver.scrollBack(-1);
         // receiver.scrollBack(-Math.floor(receiver.rows/2));
+        receiver.scrollBack(-receiver.rows);
         renderScreen();
       } else {
         transmitter.typeIn(e);
@@ -298,11 +331,7 @@ window.onload = () => {
   });
 
   renderScreen();
-
-  var desiredWindowWidth = $('#screen #row-0 div').width();
-  var desiredWindowHeight = $('#screen').height() + 25;
-  remote.getCurrentWindow().setMinimumSize(desiredWindowWidth, desiredWindowHeight);
-  remote.getCurrentWindow().setSize(desiredWindowWidth, desiredWindowHeight);
+  fitWindow();
 
   $('#inputModal').on('shown.bs.modal', function () {
     modalShown = true;

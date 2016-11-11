@@ -12,6 +12,9 @@ function createWindow(commandLine) {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  mainWindow.on('resize', (e) => {
+    mainWindow.webContents.executeJavaScript('fitScreen();');
+  });
 }
 
 function printVersion() {
@@ -90,7 +93,7 @@ const template = [
       {
         label: '終了',
         accelerator: 'Control+Q',
-        click: function () {
+        click(item, focusedWindow) {
           app.quit()
         }
       }
@@ -101,21 +104,21 @@ const template = [
     submenu: [
       {
         label: 'コピー',
-        click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('copy();')
+        click(item, focusedWindow) {
+          focusedWindow.webContents.executeJavaScript('copy();')
         }
       },
       {
         label: '貼り付け',
-        click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('paste();')
+        click(item, focusedWindow) {
+          focusedWindow.webContents.executeJavaScript('paste();')
         }
       },
       { type: 'separator' },
       {
         label: 'テキスト入力',
-        click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('showInputModal();');
+        click(item, focusedWindow) {
+          focusedWindow.webContents.executeJavaScript('showInputModal();');
         }
       },
     ]
@@ -126,27 +129,68 @@ const template = [
       {
         label: 'DevTools 切り替え',
         accelerator: 'F12',
-        click: function () {
-          BrowserWindow.getFocusedWindow().toggleDevTools()
+        click(item, focusedWindow) {
+          focusedWindow.toggleDevTools()
         }
       },
       { type: 'separator' },
       {
+        label: '文字の大きさ',
+        submenu: [
+          {
+            label: '特大',
+            type: 'radio',
+            click(item, focusedWindow) {
+              focusedWindow.webContents.executeJavaScript('changeFontSize(32)');
+            }
+          },
+          {
+            label: '大',
+            type: 'radio',
+            click(item, focusedWindow) {
+              focusedWindow.webContents.executeJavaScript('changeFontSize(20)');
+            }
+          },
+          {
+            label: '中',
+            type: 'radio',
+            checked: true,
+            click(item, focusedWindow) {
+              focusedWindow.webContents.executeJavaScript('changeFontSize(16)');
+            }
+          },
+          {
+            label: '小',
+            type: 'radio',
+            click(item, focusedWindow) {
+              focusedWindow.webContents.executeJavaScript('changeFontSize(12)');
+            }
+          },
+          {
+            label: '極小',
+            type: 'radio',
+            click(item, focusedWindow) {
+              focusedWindow.webContents.executeJavaScript('changeFontSize(8)');
+            }
+          },
+        ]
+      },
+      {
         label: '画面反転',
-        click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.reverseScreenMode = !receiver.reverseScreenMode; renderScreen();');
+        click(item, focusedWindow) {
+          focusedWindow.webContents.executeJavaScript('receiver.reverseScreenMode = !receiver.reverseScreenMode; renderScreen();');
         }
       },
       {
         label: '80x24',
-        click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.setScreenSize(80,24); renderScreen();');
+        click(item, focusedWindow) {
+          focusedWindow.webContents.executeJavaScript('receiver.setScreenSize(80,24); renderScreen();');
         }
       },
       {
         label: '132x24',
-        click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('receiver.setScreenSize(132,24); renderScreen();');
+        click(item, focusedWindow) {
+          focusedWindow.webContents.executeJavaScript('receiver.setScreenSize(132,24); renderScreen();');
         }
       },
     ]
@@ -156,8 +200,8 @@ const template = [
     submenu: [
       {
         label: 'バージョン情報',
-        click: function () {
-          BrowserWindow.getFocusedWindow().webContents.executeJavaScript('showAboutModal();');
+        click(item, focusedWindow) {
+          focusedWindow.webContents.executeJavaScript('showAboutModal();');
         }
       },
     ]

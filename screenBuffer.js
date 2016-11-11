@@ -122,6 +122,15 @@ Row.prototype.clear = function () {
   this.setType('normal');
 };
 
+Row.prototype.toString = function () {
+  var str = '';
+
+  for (var i = 0; i < this.length; i++) {
+    str += this.array[i].character;
+  }
+  return str;
+};
+
 var CBuffer = require('CBuffer');
 
 // スクリーンバッファー。文字セルの二次元配列のようなもの。
@@ -309,6 +318,14 @@ ScreenBuffer.prototype.clearAll = function () {
 ScreenBuffer.prototype.resetFlags = function () {
   this.scrollPerformed = false;
 };
+
+ScreenBuffer.prototype.toString = function () {
+  var str = '';
+  for (var i = 0; i < this.rows; i++) {
+    str += this.getLine(i).toString() + '\n';
+  }
+  return str;
+}
 
 module.exports = {
   GraphicAttrs: GraphicAttrs,

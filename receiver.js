@@ -14,10 +14,11 @@ function Receiver(columns, rows, callbacks) {
     cursorKeyMode: function(mode) {},
     beep:          function() {},
   };
-  this.callbacks.write         = callbacks.write;
-  this.callbacks.resize        = callbacks.resize;
-  this.callbacks.cursorKeyMode = callbacks.cursorKeyMode;
-  this.callbacks.beep          = callbacks.beep;
+  for (var name of ['write', 'resize', 'cursorKeyMode', 'beep']) {
+    if (callbacks[name]) {
+      this.callbacks[name] = callbacks[name];
+    }
+  }
 
   this.fullReset();
 }
