@@ -188,26 +188,30 @@ term.on('data', function(data) {
   var _data = Array.from(data);
   term.pause();
   function iter(index) {
-    while (true) {
-      if (index === _data.length) {
-        renderScreen();
-        term.resume();
-        return;
-      } else {
-        var char = _data[index];
-
-        receiver.feed(char);
-        if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
-          setTimeout(() => {
-            console.log(Date.now());
-            renderScreen();
-            iter(index + 1);
-          }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
+    try {
+      while (true) {
+        if (index === _data.length) {
+          renderScreen();
+          term.resume();
           return;
         } else {
-          index += 1;
+          var char = _data[index];
+
+          receiver.feed(char);
+          if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
+            setTimeout(() => {
+              console.log(Date.now());
+              renderScreen();
+              iter(index + 1);
+            }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
+            return;
+          } else {
+            index += 1;
+          }
         }
       }
+    } catch (err) {
+      alert(err.stack);
     }
   }
   iter(0);
@@ -219,11 +223,13 @@ term.on('close', function () {
 
 var needsResize = false;
 var beepAudio = new Audio('beep.wav');
+var resizing = false;
 
 var receiver = new Receiver(term.cols, term.rows, {
   write: (data) => term.write(data),
   resize: (cols, rows) => {
     term.resize(cols, rows);
+    resizing = true
     needsResize = true;
   },
   cursorKeyMode: (mode) => {
@@ -294,6 +300,11 @@ function fitWindow() {
 }
 
 function fitScreen() {
+  if (resizing) {
+    resizing = false;
+    return;
+  }
+
   var [windowWidth, windowHeight] = remote.getCurrentWindow().getSize();
 
   // var screenWidth = width - 40;

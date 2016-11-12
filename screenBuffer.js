@@ -80,9 +80,8 @@ function createArrayThus(length, fn) {
 
 
 function Row(length) {
-  this.length = length;
   this._type = 'normal';
-  this.array = createArrayThus(length, () => new Cell());
+  this.array = [];
 }
 
 const ROW_TYPES = ['normal', 'double-width', 'top-half', 'bottom-half'];
@@ -101,12 +100,15 @@ Row.prototype.checkInRange = function (index) {
   if (!Number.isInteger(index))
     throw TypeError('not an integer');
 
-  if (index < 0 || index >= this.columns)
+  if (index < 0)
     throw RangeError('index');
 };
 
 Row.prototype.getCellAt = function (index) {
   this.checkInRange(index);
+
+  if (this.array[index] === undefined)
+    this.array[index] = new Cell();
 
   return this.array[index];
 };
@@ -118,17 +120,18 @@ Row.prototype.setCellAt = function (index, cell) {
 };
 
 Row.prototype.clear = function () {
-  this.array = createArrayThus(this.length, () => new Cell());
+  this.array = [];
   this.setType('normal');
 };
 
 Row.prototype.toString = function () {
   var str = '';
 
-  for (var i = 0; i < this.length; i++) {
-    str += this.array[i].character;
+  for (var i = 0; i < this.array.length; i++) {
+    str += this.getCellAt(i).character;
   }
-  return str;
+  
+  return str.trimRight();
 };
 
 var CBuffer = require('CBuffer');
@@ -156,7 +159,7 @@ ScreenBuffer.prototype.createBuffer = function (capacity) {
   var buf = new CBuffer(capacity);
 
   for (var i = 0; i < this.rows; i++)
-    buf.unshift(new Row(this.columns));
+    buf.unshift(new Row());
 
   return buf;
 };
@@ -228,7 +231,7 @@ ScreenBuffer.prototype.scrollDown = function (y1, y2, nlines) {
   }
 
   for (var j = y1; j < y1 + nlines; j++) {
-    this.setLine(j, new Row(this.columns));
+    this.setLine(j, new Row());
   }
 
   this.scrollPerformed = true;
@@ -246,7 +249,7 @@ ScreenBuffer.prototype.scrollUp = function (y1, y2, nlines) {
   }
 
   for (var j = y2 - nlines + 1; j < y2 + 1; j++) {
-    this.setLine(j, new Row(this.columns));
+    this.setLine(j, new Row());
   }
 
   this.scrollPerformed = true;
@@ -254,17 +257,54 @@ ScreenBuffer.prototype.scrollUp = function (y1, y2, nlines) {
 
 ScreenBuffer.prototype.softScrollUp = function (nlines) {
   for (var i = 0; i < nlines; i++) {
-    this._buffer.unshift(new Row(this.columns));
+    this._buffer.unshift(new Row());
   }
 }
 
 ScreenBuffer.prototype.getLine = function (index) {
   // TODO: 引数チェック
-  return this._buffer.get(this._scrollBackOffset + this.rows - index - 1);
+  if (!Number.isInteger(index)) {
+    throw new RangeError(`index = ${index}`);
+  }
+  var indexIntoCBuffer = this._scrollBackOffset + this.rows - index - 1;
+  if (indexIntoCBuffer < 0 ||
+      indexIntoCBuffer >= this._buffer.length) {
+    throw new RangeError(`indexIntoCBuffer = ${indexIntoCBuffer}`);
+  } 
+  
+  return this._buffer.get(indexIntoCBuffer);
 }
 
 ScreenBuffer.prototype.setLine = function (index, line) {
   this._buffer.set(this._scrollBackOffset + this.rows - index - 1, line);
+}
+
+ScreenBuffer.prototype.increaseRows = function (newNumberOfRows) {
+  var shortage = 0;
+  if (this._buffer.length < newNumberOfRows) {
+    shortage = newNumberOfRows - this._buffer.length;
+    for (var i = 0; i < shortage; i++) {
+      this._buffer.unshift(new Row());
+    }
+  }
+
+  this._scrollBackOffset = 0;
+  this.rows = newNumberOfRows;
+
+  return shortage;
+};
+
+ScreenBuffer.prototype.decreaseRows = function (newNumberOfRows, allowedToDiscard) {
+  console.log(`allowedToDiscard = ${allowedToDiscard}`);
+  var toDiscard = Math.min(this.rows - newNumberOfRows, allowedToDiscard);
+  for (var i = 0; i < toDiscard; i++) {
+    this._buffer.shift();
+  }
+
+  this._scrollBackOffset = 0;
+  this.rows = newNumberOfRows;
+
+  return toDiscard;
 }
 
 ScreenBuffer.prototype.clone = function () {

@@ -87,6 +87,8 @@ function assertEquals(expected, value) {
     console.log('OK');
   } else {
     console.log('FAIL');
+    console.log('expected: ', expected);
+    console.log('got: ', value);
   }
 }
 
@@ -103,6 +105,33 @@ function assertThrows(expectedError, fn) {
   }
 }
 
+function objectSlice(obj, key_or_keys) {
+  var keys;
+
+  if (typeof(key_or_keys) === 'string')  {
+    keys = [key_or_keys];
+  } else if (key_or_keys instanceof Array) {
+    keys = key_or_keys;
+  } else {
+    throw new TypeError('key_or_keys');
+  }
+
+  var res = {};
+
+  for (var key of keys) {
+    res[key] = obj[key];
+  }
+
+  return res;
+}
+
+function objectBecomeMerged(dst, src) {
+  for (var key of Object.keys(src)) {
+    dst[key] = src[key];
+  }
+  return dst;
+}
+
 module.exports = {
   orElse: orElse,
   orElseGet: orElseGet,
@@ -115,5 +144,7 @@ module.exports = {
   setUnion: setUnion,
   assertEquals: assertEquals,
   assertThrows: assertThrows,
+  objectSlice: objectSlice,
+  objectBecomeMerged: objectBecomeMerged,
 };
 

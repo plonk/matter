@@ -2,6 +2,7 @@
 
 var eastasianwidth = require('eastasianwidth');
 var {ScreenBuffer, GraphicAttrs, Cell} = require('./screenBuffer');
+var {objectSlice, objectBecomeMerged} = require('./util');
 
 function Receiver(columns, rows, callbacks) {
   if (columns <= 0) throw RangeError('columns');
@@ -9,12 +10,12 @@ function Receiver(columns, rows, callbacks) {
   this.columns = columns;
   this.rows = rows;
   this.callbacks = {
-    write:         function(data) {},
-    resize:        function(cols, rows) {},
-    cursorKeyMode: function(mode) {},
-    beep:          function() {},
+    write(data) {},
+    resize(cols, rows) {},
+    cursorKeyMode(mode) {},
+    beep() {},
   };
-  for (var name of ['write', 'resize', 'cursorKeyMode', 'beep']) {
+  for (var name of Object.keys(this.callbacks)) {
     if (callbacks[name]) {
       this.callbacks[name] = callbacks[name];
     }
@@ -700,14 +701,57 @@ Receiver.prototype.useNormalScreenBuffer = function () {
   this.alternateScreen = false;
 };
 
-Receiver.prototype.setScreenSize = function (columns, rows) {
+// DECCOLM用。
+Receiver.prototype.setScreenSizeAndReset = function (columns, rows) {
   this.columns = columns;
   this.rows = rows;
 
   // リバース画面の設定はリセットしたくない。
-  var tmp = this.reverseScreenMode;
+  var aspects = objectSlice(this, ['reverseScreenMode']);
   this.fullReset();
-  this.reverseScreenMode = tmp;
+  objectBecomeMerged(this, aspects);
+  this.callbacks.resize(columns, rows);
+};
+
+Receiver.prototype.setScreenSize = function (columns, rows) {
+  // スクリーンバッファーをリサイズする。
+  //
+  // 高さを大きくする場合：
+  //
+  //   スクロールバックバッファーからひっぱりだしてくる。
+  //
+  //   バッファーで足りなかったら空行をついかする。
+  //
+  // 高さを小さくする場合：
+  //
+  //   カーソルより下の行を削除する。
+  //
+  //   カーソルの行とそれより上の行は、スクロールバックバッファーに入れ
+  //   る。
+  if (rows > this.rows) {
+    var addedLines = this.buffer.increaseRows(rows);
+    this.backBuffer.increaseRows(rows);
+    this.cursor_y += rows - this.rows - addedLines;
+  } else if (rows < this.rows) {
+    var linesBelow = this.rows - this.cursor_y - 1;
+    this.buffer.decreaseRows(rows, linesBelow);
+    this.backBuffer.decreaseRows(rows, linesBelow);
+  }
+  this.buffer.columns = columns;
+  this.backBuffer.columns = columns;
+
+  this.columns = columns;
+  this.rows = rows;
+
+  this.scrollingRegionTop = 0;
+  this.scrollingRegionBottom = this.rows - 1;
+
+  this.cursor_x = Math.min(this.cursor_x, this.columns - 1);
+  this.cursor_y = Math.min(this.cursor_y, this.rows - 1);
+
+  // タブストップのリセット。
+  this.resetTabStops();
+
   this.callbacks.resize(columns, rows);
 };
 
@@ -718,7 +762,7 @@ Receiver.prototype.doPrivateModeSet = function (num) {
     this.callbacks.cursorKeyMode('application');
     break;
   case 3:
-    this.setScreenSize(132, 24);
+    this.setScreenSizeAndReset(132, 24);
     break;
   case 4:
     this.smoothScrollMode = true;
@@ -780,7 +824,7 @@ Receiver.prototype.doPrivateModeReset = function (num) {
     this.callbacks.cursorKeyMode('normal');
     break;
   case 3:
-    this.setScreenSize(80, 24);
+    this.setScreenSizeAndReset(80, 24);
     break;
   case 4:
     this.smoothScrollMode = false;
@@ -1004,7 +1048,7 @@ Receiver.prototype.operatingSystemCommand = function (arg_str) {
 Receiver.prototype.fc_startOperatingSystemCommand = function (c) {
   var args = '';
   function parsingOperatingSystemCommand(c) {
-    // String Terminator に対応していない。 
+    // String Terminator に対応していない。
     if (c === '\x07') { // BEL
       this.operatingSystemCommand(args);
       return this.fc_normal;
