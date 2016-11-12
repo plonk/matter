@@ -188,30 +188,26 @@ term.on('data', function(data) {
   var _data = Array.from(data);
   term.pause();
   function iter(index) {
-    try {
-      while (true) {
-        if (index === _data.length) {
-          renderScreen();
-          term.resume();
+    while (true) {
+      if (index === _data.length) {
+        renderScreen();
+        term.resume();
+        return;
+      } else {
+        var char = _data[index];
+
+        receiver.feed(char);
+        if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
+          setTimeout(() => {
+            console.log(Date.now());
+            renderScreen();
+            iter(index + 1);
+          }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
           return;
         } else {
-          var char = _data[index];
-
-          receiver.feed(char);
-          if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
-            setTimeout(() => {
-              console.log(Date.now());
-              renderScreen();
-              iter(index + 1);
-            }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
-            return;
-          } else {
-            index += 1;
-          }
+          index += 1;
         }
       }
-    } catch (err) {
-      alert(err.stack);
     }
   }
   iter(0);
