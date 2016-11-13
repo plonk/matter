@@ -18,7 +18,7 @@ body {
 }
 #screen div div { display: inline-block; }
 div { line-height: 1.19em }
-div > span { padding-top: 1px; padding-bottom: 1px; }
+div > span { padding-top: 2px; padding-bottom: 2px; }
 span { overflow: visible }
 
 .blink { animation: blinker 1s linear infinite }

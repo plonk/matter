@@ -665,7 +665,8 @@ Receiver.prototype.sendPrimaryDeviceAttributes = function (args_str) {
   var num = +(args_str || '0');
 
   if (num === 0) {
-    this.callbacks.write('\x1b[?1;2c');
+    // this.callbacks.write('\x1b[?1;2c'); // rxvt
+    this.callbacks.write('\x1b[?64;1;2;6;9;15;18;21;22c');
   } else {
     console.log(`send primary device attributes ${args_str}`);
   }
@@ -675,7 +676,8 @@ Receiver.prototype.sendSecondaryDeviceAttributes = function (args_str) {
   var num = +(args_str || '0');
 
   if (num === 0) {
-    this.callbacks.write('\x1b[>85;95;0c');
+    // this.callbacks.write('\x1b[>85;95;0c'); // rxvt
+    this.callbacks.write('\x1b[>41;318;0c'); // XTerm(318)
   } else {
     console.log(`send secondary device attributes ${args_str}`);
   }
@@ -782,7 +784,6 @@ Receiver.prototype.doPrivateModeSet = function (num) {
   case 12:
     // xtermのドキュメントはsetで点滅とあるが、実際の実装は逆なのでそ
     // れに従う。
-    console.log('stop blinking cursor');
     this.cursorBlink = false;
     break;
   case 25:
@@ -843,7 +844,6 @@ Receiver.prototype.doPrivateModeReset = function (num) {
   case 12:
     // xtermのドキュメントはresetで点滅停止とあるが、実際の実装は逆な
     // のでそれに従う。
-    console.log('stop blinking cursor');
     this.cursorBlink = true;
     break;
   case 25:
@@ -1041,7 +1041,7 @@ Receiver.prototype.operatingSystemCommand = function (arg_str) {
   if (args[0] === '0') { // set title bar
     this.title = String(args[1]);
   } else {
-    console.log('unknown OSC');
+    console.log(`unknown OSC ${arg_str}`);
   }
 };
 
@@ -1052,6 +1052,16 @@ Receiver.prototype.fc_startOperatingSystemCommand = function (c) {
     if (c === '\x07') { // BEL
       this.operatingSystemCommand(args);
       return this.fc_normal;
+    } else if (c === '\x1b') {
+      return function (d) {
+        if (d === '\\') {
+          this.operatingSystemCommand(args);
+          return this.fc_normal;
+        } else {
+          args += '\x1b' + d;
+          return parsingOperatingSystemCommand;
+        }
+      };
     } else {
       args += c;
       return parsingOperatingSystemCommand;

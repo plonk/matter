@@ -5,15 +5,11 @@ function Transmitter(term) {
   this.cursorKeyMode = 'normal';
 };
 
-var CHARACTER_TABLE = {
-  'Enter'      : '\x0d',
-  'Backspace'  : '\x7f',
-  'Tab'        : '\x09',
+var SEQUENCE_FUNCTION_KEYS = {
   'ArrowUp'    : '\x1b[A',
   'ArrowDown'  : '\x1b[B',
   'ArrowRight' : '\x1b[C',
   'ArrowLeft'  : '\x1b[D',
-  'Escape'     : '\x1b',
 
   'F1'         : '\x1bOP',
   'F2'         : '\x1bOQ',
@@ -38,6 +34,13 @@ var CHARACTER_TABLE = {
   'PageDown'   : '\x1b[6~',
 };
 
+var CONTROL_CHARACTER_KEYS = {
+  'Enter'      : '\x0d',
+  'Backspace'  : '\x7f',
+  'Tab'        : '\x09',
+  'Escape'     : '\x1b',
+};
+
 var APPLICATION_FUNCTION_KEY_TABLE = {
   'ArrowUp'    : '\x1bOA',
   'ArrowDown'  : '\x1bOB',
@@ -45,11 +48,73 @@ var APPLICATION_FUNCTION_KEY_TABLE = {
   'ArrowLeft'  : '\x1bOD',
 };
 
-Transmitter.prototype.toCharacter = function (key, ctrlKey, altKey) {
+var MODIFIER_TABLE = {
+  s: 2,
+  a: 3,
+  sa: 4,
+  c: 5,
+  sc: 6,
+  ac: 7,
+  sac: 8,
+};
+
+function modificationNumber(c, a, s) {
+  var str = '';
+  if (s)
+    str += 's';
+  if (a)
+    str += 'a';
+  if (c)
+    str += 'c';
+
+  return MODIFIER_TABLE[str];
+}
+
+function modifyFunctionKey (seq, ctrlKey, altKey, shiftKey) {
+  var mod = modificationNumber(ctrlKey, altKey, shiftKey);
+  var match;
+
+  if (!(ctrlKey || altKey || shiftKey)) // unmodified
+    return seq;
+
+  console.log(seq);
+  console.log(ctrlKey, altKey, shiftKey);
+  // CSI
+  match = seq.match(/^\x1b\[(.*?)(.)$/); // ~ を一般化すべき？
+  if (match) {
+    var num = match[1] || '1';
+    return `\x1b[${num};${mod}${match[2]}`;
+  }
+
+  // SS3
+  match = seq.match(/^\x1bO(.*)$/);
+  if (match) {
+    // CSI に変更する。
+    return `\x1b[1;${mod}${match[1]}`;
+  }
+
+  return seq;
+};
+
+Transmitter.prototype.toCharacter = function (key, ctrlKey, altKey, shiftKey) {
+  if (this.cursorKeyMode === 'application' &&
+      APPLICATION_FUNCTION_KEY_TABLE[key]) {
+      return APPLICATION_FUNCTION_KEY_TABLE[key];
+  }
+
+  if (CONTROL_CHARACTER_KEYS[key]) {
+    return CONTROL_CHARACTER_KEYS[key];
+  }
+
+  if (SEQUENCE_FUNCTION_KEYS[key]) {
+    return modifyFunctionKey(SEQUENCE_FUNCTION_KEYS[key], ctrlKey, altKey, shiftKey);
+  }
+
+  // きっと通常の印字文字
   if (altKey) {
-    return "\x1b" + this.toCharacter(key, ctrlKey, false);
+    return "\x1b" + this.toCharacter(key, ctrlKey, false, shiftKey);
   } else if (ctrlKey) {
-    var char = this.toCharacter(key, false, false).toUpperCase();
+    var char = this.toCharacter(key, false, false, shiftKey).toUpperCase();
     if (char.length === 1 && ord(char) >= 0x40 && ord(char) <= 0x5f) {
       return chr(ord(char) - 0x40);
     } else if (char === '/') {
@@ -64,11 +129,6 @@ Transmitter.prototype.toCharacter = function (key, ctrlKey, altKey) {
   } else {
     if (key.length === 1) {
       return key;
-    } else if (this.cursorKeyMode === 'application' &&
-               APPLICATION_FUNCTION_KEY_TABLE[key] !== undefined) {
-      return APPLICATION_FUNCTION_KEY_TABLE[key];
-    } else if (CHARACTER_TABLE[key] !== undefined) {
-      return CHARACTER_TABLE[key];
     } else {
       return "";
     }
@@ -76,10 +136,11 @@ Transmitter.prototype.toCharacter = function (key, ctrlKey, altKey) {
 };
 
 Transmitter.prototype.typeIn = function (ev) {
-  if (ev.key === 'Control' || ev.key === 'Shift' || ev.key === 'Alt')
+  var {key, ctrlKey, altKey, shiftKey} = ev;
+  if (key === 'Control' || key === 'Shift' || key === 'Alt')
     return;
 
-  var str = this.toCharacter(ev.key, ev.ctrlKey, ev.altKey);
+  var str = this.toCharacter(key, ctrlKey, altKey, shiftKey);
   if (str.length !== 0)
     this.term.write(str);
 };
