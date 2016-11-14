@@ -881,10 +881,41 @@ Receiver.prototype.dispatchCommandQuestion = function (letter, args_str) {
   return this.fc_normal;
 };
 
+Receiver.prototype.changeModifyKeysResource = function (args_str) {
+  var args = args_str.split(/;/);
+  var resourceNames = ['modifyKeyboard', 'modifyCursorKeys', 'modifyFunctionKeys', undefined, 'modifyOtherKeys'];
+  switch (args.length) {
+  case 1:
+    switch(args[0]) {
+    case '0': case '1': case '2': case '4':
+      console.debug(`${resourceNames[args[0]]} to initial value`);
+      break;
+    default:
+      console.error(`unable to interpret: CSI > ${args_str} m`);
+    }
+    break;
+  case 2:
+    switch(args[0]) {
+    case '0': case '1': case '2': case '4':
+      console.debug(`${resourceNames[args[0]]} to ${args[1]}`);
+      break;
+    default:
+      console.error(`unable to interpret: CSI > ${args_str} m`);
+    }
+    break;
+  default:
+    console.error(`unable to interpret: CSI > ${args_str} m`);
+    return;
+  }
+};
+
 Receiver.prototype.dispatchCommandGreater = function (letter, args_str) {
   switch (letter) {
   case 'c':
     this.sendSecondaryDeviceAttributes();
+    break;
+  case 'm':
+    this.changeModifyKeysResource(args_str);
     break;
   default:
     console.log(`unknown > command letter ${letter} args ${args_str}`);
@@ -1040,6 +1071,10 @@ Receiver.prototype.operatingSystemCommand = function (arg_str) {
 
   if (args[0] === '0') { // set title bar
     this.title = String(args[1]);
+  } else if (args[0] === '11') {
+    this.callbacks.write(`\x1b]11;rgb:0000/0000/0000\x1b\\`);
+  } else if (args[0] === '12') {
+    this.callbacks.write(`\x1b]12;rgb:e5e5/e5e5/e5e5\x1b\\`);
   } else {
     console.log(`unknown OSC ${arg_str}`);
   }

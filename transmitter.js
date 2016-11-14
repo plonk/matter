@@ -42,10 +42,10 @@ var CONTROL_CHARACTER_KEYS = {
 };
 
 var APPLICATION_FUNCTION_KEY_TABLE = {
-  'ArrowUp'    : '\x1bOA',
-  'ArrowDown'  : '\x1bOB',
-  'ArrowRight' : '\x1bOC',
-  'ArrowLeft'  : '\x1bOD',
+  // 'ArrowUp'    : '\x1bOA',
+  // 'ArrowDown'  : '\x1bOB',
+  // 'ArrowRight' : '\x1bOC',
+  // 'ArrowLeft'  : '\x1bOD',
 };
 
 var MODIFIER_TABLE = {

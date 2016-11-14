@@ -186,6 +186,13 @@ var term = pty.spawn(commandLine[0], commandLine.slice(1), {
 
 term.on('data', function(data) {
   var _data = Array.from(data);
+
+  if (!receiver.smoothScrollMode) {
+    receiver.feed(_data);
+    renderScreen();
+    return;
+  }
+
   term.pause();
   function iter(index) {
     while (true) {
