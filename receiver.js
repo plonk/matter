@@ -2,7 +2,7 @@
 
 var eastasianwidth = require('eastasianwidth');
 var {ScreenBuffer, GraphicAttrs, Cell} = require('./screenBuffer');
-var {objectSlice, objectBecomeMerged} = require('./util');
+var {objectSlice, objectBecomeMerged, inspect} = require('./util');
 
 function Receiver(columns, rows, callbacks) {
   if (columns <= 0) throw RangeError('columns');
@@ -303,7 +303,7 @@ Receiver.prototype.fc_controlSequenceIntroduced = function (c) {
     } else if (/^[\x40-\x7e]$/.exec(c)) {
       this.dispatchCommand(c, args);
       return this.fc_normal;
-    } else if (/^[?>0-9;]$/.exec(c)) {
+    } else if (/^[=?>0-9;]$/.exec(c)) {
       args += c;
       return parsingControlSequence;
     } else {
@@ -519,9 +519,21 @@ Receiver.prototype.eraseInLine = function (args_str) {
 };
 
 Receiver.prototype.deviceStatusReport = function (args_str) {
-  var y = this.cursor_y + 1;
-  var x = this.cursor_x + 1;
-  this.callbacks.write(`\x1b[${y};${x}R`);
+  var num = +args_str;
+
+  switch (num) {
+  case 5: // Status Report
+    this.callbacks.write('\x1b[0n');
+    break;
+  case 6: // Report Cursor Position;
+    var y = this.cursor_y + 1;
+    var x = this.cursor_x + 1;
+    this.callbacks.write(`\x1b[${y};${x}R`);
+    break;
+  default:
+    console.error(`unknown argument to DSR ${args_str}`);
+    break;
+  }
 };
 
 Receiver.prototype.cursorToLine = function (args_str) {
@@ -666,7 +678,8 @@ Receiver.prototype.sendPrimaryDeviceAttributes = function (args_str) {
 
   if (num === 0) {
     // this.callbacks.write('\x1b[?1;2c'); // rxvt
-    this.callbacks.write('\x1b[?64;1;2;6;9;15;18;21;22c');
+    // this.callbacks.write('\x1b[?64;1;2;6;9;15;18;21;22c'); // xterm
+    this.callbacks.write('\x1b[?64;1;4;9;22c');
   } else {
     console.log(`send primary device attributes ${args_str}`);
   }
@@ -681,6 +694,17 @@ Receiver.prototype.sendSecondaryDeviceAttributes = function (args_str) {
   } else {
     console.log(`send secondary device attributes ${args_str}`);
   }
+};
+
+Receiver.prototype.sendTertiaryDeviceAttributes = function (args_str) {
+  if (args_str !== '' && args_str !== '0') {
+    console.log(`unknown argument (${args_str}) to DA3`);
+    return;
+  }
+
+  // DCS ! | FF 01 02 03 ST
+  // site FF, ID 123
+  this.callbacks.write('\x1bP!|FF010203\x1b\\');
 };
 
 Receiver.prototype.useAlternateScreenBuffer = function () {
@@ -722,7 +746,7 @@ Receiver.prototype.setScreenSize = function (columns, rows) {
   //
   //   スクロールバックバッファーからひっぱりだしてくる。
   //
-  //   バッファーで足りなかったら空行をついかする。
+  //   バッファーで足りなかったら空行を追加する。
   //
   // 高さを小さくする場合：
   //
@@ -781,6 +805,9 @@ Receiver.prototype.doPrivateModeSet = function (num) {
   case 7:
     this.autoWrap = true;
     break;
+  case 8:
+    console.log('auto-repeat keys');
+    break;
   case 12:
     // xtermのドキュメントはsetで点滅とあるが、実際の実装は逆なのでそ
     // れに従う。
@@ -788,6 +815,12 @@ Receiver.prototype.doPrivateModeSet = function (num) {
     break;
   case 25:
     this.isCursorVisible = true;
+    break;
+  case 40:
+    console.log('allow 80 <-> 132 mode');
+    break;
+  case 45:
+    console.log('reverse-wraparound mode (unimplemented)');
     break;
   case 47:
     this.useAlternateScreenBuffer();
@@ -841,6 +874,9 @@ Receiver.prototype.doPrivateModeReset = function (num) {
   case 7:
     this.autoWrap = false;
     break;
+  case 8:
+    console.log('no auto-repeat keys (unimplemented)');
+    break;
   case 12:
     // xtermのドキュメントはresetで点滅停止とあるが、実際の実装は逆な
     // のでそれに従う。
@@ -848,6 +884,12 @@ Receiver.prototype.doPrivateModeReset = function (num) {
     break;
   case 25:
     this.isCursorVisible = false;
+    break;
+  case 40:
+    console.log('disallow 80 <-> 132 mode (unimplemented)');
+    break;
+  case 45:
+    console.log('no reverse-wraparound mode');
     break;
   case 47:
     this.useNormalScreenBuffer();
@@ -879,6 +921,17 @@ Receiver.prototype.dispatchCommandQuestion = function (letter, args_str) {
     console.log(`unknown ? command letter ${letter} args ${args_str}`);
   }
   return this.fc_normal;
+};
+
+Receiver.prototype.dispatchCommandEquals = function (letter, args_str) {
+  switch (letter) {
+  case 'c':
+    this.sendTertiaryDeviceAttributes(args_str);
+    break;
+  default:
+    console.log(`unknown command CSI = ${args_str}`);
+    break;
+  }
 };
 
 Receiver.prototype.changeModifyKeysResource = function (args_str) {
@@ -976,6 +1029,9 @@ Receiver.prototype.dispatchCommand = function (letter, args_str) {
     return this.fc_normal;
   } else if (args_str[0] === '>') {
     this.dispatchCommandGreater(letter, args_str.slice(1));
+    return this.fc_normal;
+  } else if (args_str[0] === '=') {
+    this.dispatchCommandEquals(letter, args_str.slice(1));
     return this.fc_normal;
   }
 
@@ -1243,6 +1299,35 @@ Receiver.prototype.fc_singleShift3 = function (c) {
   return this.fc_normal;
 };
 
+Receiver.prototype.dispatchDeviceControngString = function (args_str) {
+  if (args_str === '$q"p') {
+    this.callbacks.write('\x1bP1$r64;1"p\e\\');
+  } else {
+    console.log('got DCS', inspect(args_str));
+  }
+};
+
+Receiver.prototype.fc_deviceControlString = function (c) {
+  var args = '';
+  function iter(c) {
+    if (c === '\x1b') {
+      return function (d) {
+        if (d === '\\') {
+          this.dispatchDeviceControngString(args);
+          return this.fc_normal;
+        } else {
+          args += '\x1b' + d;
+          return iter;
+        }
+      };
+    } else {
+      args += c;
+      return iter;
+    }
+  }
+  return iter.call(this, c);
+};
+
 Receiver.prototype.fc_esc = function (c) {
   if (isControl(c)) {
     this.processControlCharacter(c);
@@ -1295,6 +1380,8 @@ Receiver.prototype.fc_esc = function (c) {
   } else if (c === 'O') {
     // Single Shift 3
     return this.fc_singleShift3;
+  } else if (c === 'P') { // Device Control String
+    return this.fc_deviceControlString;
   } else {
     console.log(`got ${c} while expecting [`);
     return this.fc_normal;

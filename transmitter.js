@@ -77,8 +77,8 @@ function modifyFunctionKey (seq, ctrlKey, altKey, shiftKey) {
   if (!(ctrlKey || altKey || shiftKey)) // unmodified
     return seq;
 
-  console.log(seq);
-  console.log(ctrlKey, altKey, shiftKey);
+  // console.log(seq);
+  // console.log(ctrlKey, altKey, shiftKey);
   // CSI
   match = seq.match(/^\x1b\[(.*?)(.)$/); // ~ を一般化すべき？
   if (match) {

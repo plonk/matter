@@ -206,7 +206,7 @@ term.on('data', function(data) {
         receiver.feed(char);
         if (receiver.smoothScrollMode && receiver.buffer.scrollPerformed) {
           setTimeout(() => {
-            console.log(Date.now());
+            // console.log(Date.now());
             renderScreen();
             iter(index + 1);
           }, 0); // どの道、レンダリングに百数十ミリ秒かかるのでタイムアウトを設定しない。
@@ -276,7 +276,7 @@ function enterText() {
 
   transmitter.paste(text);
   renderScreen();
-  $('#myModal').modal('hide');
+  $('#inputModal').modal('hide');
 }
 
 function paste() {
@@ -315,7 +315,7 @@ function fitScreen() {
   var nColumns = Math.round((windowWidth - 40) / charWidth);
 
   var lineHeight = parseFloat($('#screen').css('line-height').replace(/px/, ''));
-  console.log(lineHeight);
+  // console.log(lineHeight);
   var nRows = Math.round((windowHeight - 65) / lineHeight);
 
   receiver.setScreenSize(nColumns, nRows);

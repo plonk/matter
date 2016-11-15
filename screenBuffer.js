@@ -295,7 +295,7 @@ ScreenBuffer.prototype.increaseRows = function (newNumberOfRows) {
 };
 
 ScreenBuffer.prototype.decreaseRows = function (newNumberOfRows, allowedToDiscard) {
-  console.log(`allowedToDiscard = ${allowedToDiscard}`);
+  // console.log(`allowedToDiscard = ${allowedToDiscard}`);
   var toDiscard = Math.min(this.rows - newNumberOfRows, allowedToDiscard);
   for (var i = 0; i < toDiscard; i++) {
     this._buffer.shift();
