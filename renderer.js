@@ -145,11 +145,9 @@ function renderScreen() {
 
   setWindowTitle();
 
-  // adjustWindowHeight();
-  if (needsResize) {
+  if (windowNeedsResizing) {
     fitWindow();
-    // adjustWindowWidth();
-    needsResize = false;
+    windowNeedsResizing = false;
   }
 }
 
@@ -224,16 +222,15 @@ term.on('close', function () {
   window.close();
 });
 
-var needsResize = false;
+var windowNeedsResizing = false;
 var beepAudio = new Audio('beep.wav');
-var resizing = false;
+var ignoreResizeEventOnce = false;
 
 var receiver = new Receiver(term.cols, term.rows, {
   write: (data) => term.write(data),
   resize: (cols, rows) => {
     term.resize(cols, rows);
-    resizing = true
-    needsResize = true;
+    windowNeedsResizing = true;
   },
   cursorKeyMode: (mode) => {
     transmitter.cursorKeyMode = mode;
@@ -293,6 +290,7 @@ function changeFontSize(pixels) {
   fitWindow();
 }
 
+// 現在のウィンドウの大きさを端末画面の大きさに合わせる。
 function fitWindow() {
   $('#screen').css('width', `${receiver.columns}ch`);
 
@@ -300,14 +298,14 @@ function fitWindow() {
   var height = $('#screen').outerHeight(true) + 40 + 25;
 
   remote.getCurrentWindow().setSize(Math.floor(width), Math.floor(height));
+  ignoreResizeEventOnce = true;
 }
 
 function fitScreen() {
-  if (resizing) {
-    resizing = false;
+  if (ignoreResizeEventOnce) {
+    ignoreResizeEventOnce = false;
     return;
   }
-
   var [windowWidth, windowHeight] = remote.getCurrentWindow().getSize();
 
   // var screenWidth = width - 40;
@@ -316,7 +314,7 @@ function fitScreen() {
 
   var lineHeight = parseFloat($('#screen').css('line-height').replace(/px/, ''));
   // console.log(lineHeight);
-  var nRows = Math.round((windowHeight - 65) / lineHeight);
+  var nRows = Math.ceil((windowHeight - 65) / lineHeight);
 
   receiver.setScreenSize(nColumns, nRows);
   renderScreen();
