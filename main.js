@@ -15,6 +15,9 @@ function createWindow(commandLine) {
   mainWindow.on('resize', (e) => {
     mainWindow.webContents.executeJavaScript('fitScreen();');
   });
+  mainWindow.on('focus', (c) => {
+    mainWindow.webContents.focus();
+  });
 }
 
 function printVersion() {
