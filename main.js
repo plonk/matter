@@ -5,8 +5,18 @@ const {version} = require('./version');
 
 let mainWindow;
 
+app.allowRendererProcessReuse = false;
+
 function createWindow(commandLine) {
-  mainWindow = new BrowserWindow({ width: 1150, height: 650 });
+  mainWindow = new BrowserWindow({
+    width: 1150,
+    height: 650,
+    webPreferences: {
+      nodeIntegration: true,
+      enableRemoteModule: true,
+      //preload: `${__dirname}/preload.js`,
+    }
+  });
   mainWindow.loadURL(`file://${__dirname}/index.html`);
   mainWindow.commandLine = commandLine;
   mainWindow.on('closed', () => {

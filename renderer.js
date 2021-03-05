@@ -1,6 +1,6 @@
 'use strict';
 
-var pty = require('pty');
+var pty = require('node-pty');
 var {ipcRenderer, remote, clipboard} = require('electron')
 var {Receiver}    = require('./receiver')
 var {Transmitter} = require('./transmitter');
